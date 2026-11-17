@@ -1,0 +1,536 @@
+{
+  "specimen": "openmsk-invivo-3t",
+  "laterality": "Right",
+  "demographics": "In-Vivo 3.0T Sagittal qDESS Right Knee (Stanford OpenMSK 2026 + NIH R01GM104139 Soft-Tissue Atlas)",
+  "alignmentDetected": "RAS (x,y,z)",
+  "bScore": -0.203,
+  "chondralMetrics": {
+    "pat_cart_mm_mean": 2.4,
+    "pat_cart_mm_std": 0.62,
+    "pat_cart_mm_median": 2.47,
+    "ant_fem_cart_mm_mean": 2.25,
+    "ant_fem_cart_mm_std": 0.6,
+    "ant_fem_cart_mm_median": 2.26,
+    "med_wb_fem_cart_mm_mean": 1.73,
+    "med_wb_fem_cart_mm_std": 0.54,
+    "med_wb_fem_cart_mm_median": 1.87,
+    "lat_wb_fem_cart_mm_mean": 1.79,
+    "lat_wb_fem_cart_mm_std": 0.42,
+    "lat_wb_fem_cart_mm_median": 1.87,
+    "med_post_fem_cart_mm_mean": 1.76,
+    "med_post_fem_cart_mm_std": 0.52,
+    "med_post_fem_cart_mm_median": 1.93,
+    "lat_post_fem_cart_mm_mean": 1.98,
+    "lat_post_fem_cart_mm_std": 0.51,
+    "lat_post_fem_cart_mm_median": 2.18,
+    "med_tib_cart_mm_mean": 1.95,
+    "med_tib_cart_mm_std": 0.54,
+    "med_tib_cart_mm_median": 2.02,
+    "lat_tib_cart_mm_mean": 2.2,
+    "lat_tib_cart_mm_std": 0.76,
+    "lat_tib_cart_mm_median": 2.14
+  },
+  "wlPresets": {
+    "qdess-clinical": {
+      "min": 14,
+      "max": 222
+    },
+    "meniscus-cruciate": {
+      "min": 18,
+      "max": 148
+    },
+    "chondral": {
+      "min": 35,
+      "max": 235
+    },
+    "trabecular": {
+      "min": 2,
+      "max": 115
+    }
+  },
+  "jointCenterRas": [
+    112.6586,
+    20.6218,
+    -11.925
+  ],
+  "threeScale": 0.04,
+  "transepicondylarPivot": [
+    0.1652,
+    1.0475,
+    0.0868
+  ],
+  "transepicondylarAxis": [
+    1.0,
+    0.00021,
+    0.00254
+  ],
+  "fatsatShape": [
+    96,
+    512,
+    512
+  ],
+  "fatsatRasBounds": {
+    "min": [
+      37.018,
+      -63.634,
+      -84.741
+    ],
+    "max": [
+      183.755,
+      119.246,
+      81.928
+    ]
+  },
+  "structures": {
+    "Femur": {
+      "labelIndex": 1,
+      "centroidRas": [
+        110.928,
+        27.622,
+        19.356
+      ],
+      "centroidThree": [
+        0.0692,
+        1.2513,
+        0.28
+      ],
+      "bboxThreeMin": [
+        -1.6296,
+        -0.2189,
+        -1.0656
+      ],
+      "bboxThreeMax": [
+        1.9388,
+        2.7043,
+        1.5789
+      ],
+      "triangles": 21998,
+      "segVoxels": 2240084
+    },
+    "Tibia": {
+      "labelIndex": 2,
+      "centroidRas": [
+        115.288,
+        23.178,
+        -39.006
+      ],
+      "centroidThree": [
+        -0.1052,
+        -1.0832,
+        0.1022
+      ],
+      "bboxThreeMin": [
+        -1.6809,
+        -2.4436,
+        -1.1648
+      ],
+      "bboxThreeMax": [
+        1.5853,
+        0.1413,
+        1.3111
+      ],
+      "triangles": 22000,
+      "segVoxels": 1551305
+    },
+    "Patella": {
+      "labelIndex": 4,
+      "centroidRas": [
+        123.639,
+        69.938,
+        24.856
+      ],
+      "centroidThree": [
+        -0.4392,
+        1.4712,
+        1.9726
+      ],
+      "bboxThreeMin": [
+        -1.4002,
+        0.562,
+        1.5408
+      ],
+      "bboxThreeMax": [
+        0.4656,
+        2.2885,
+        2.4782
+      ],
+      "triangles": 8000,
+      "segVoxels": 221808
+    },
+    "FemoralCartilage": {
+      "labelIndex": 5,
+      "centroidRas": [
+        112.776,
+        25.23,
+        -0.738
+      ],
+      "centroidThree": [
+        -0.0047,
+        0.4475,
+        0.1843
+      ],
+      "bboxThreeMin": [
+        -1.501,
+        -0.298,
+        -1.1507
+      ],
+      "bboxThreeMax": [
+        1.7932,
+        1.5034,
+        1.6424
+      ],
+      "triangles": 19998,
+      "segVoxels": 133832
+    },
+    "MedialTibialCartilage": {
+      "labelIndex": 6,
+      "centroidRas": [
+        89.45,
+        24.803,
+        -19.224
+      ],
+      "centroidThree": [
+        0.9283,
+        -0.2919,
+        0.1673
+      ],
+      "bboxThreeMin": [
+        0.2744,
+        -0.4615,
+        -0.7671
+      ],
+      "bboxThreeMax": [
+        1.5866,
+        0.0046,
+        0.9968
+      ],
+      "triangles": 9000,
+      "segVoxels": 23911
+    },
+    "LateralTibialCartilage": {
+      "labelIndex": 7,
+      "centroidRas": [
+        135.75,
+        11.832,
+        -15.814
+      ],
+      "centroidThree": [
+        -0.9236,
+        -0.1555,
+        -0.3516
+      ],
+      "bboxThreeMin": [
+        -1.6128,
+        -0.3745,
+        -1.0996
+      ],
+      "bboxThreeMax": [
+        -0.1761,
+        0.1128,
+        0.4255
+      ],
+      "triangles": 9000,
+      "segVoxels": 26725
+    },
+    "PatellarCartilage": {
+      "labelIndex": 8,
+      "centroidRas": [
+        120.89,
+        62.156,
+        26.773
+      ],
+      "centroidThree": [
+        -0.3292,
+        1.5479,
+        1.6614
+      ],
+      "bboxThreeMin": [
+        -1.3689,
+        0.9024,
+        1.4525
+      ],
+      "bboxThreeMax": [
+        0.4522,
+        2.1946,
+        2.134
+      ],
+      "triangles": 7998,
+      "segVoxels": 33791
+    },
+    "MedialMeniscus": {
+      "labelIndex": 9,
+      "centroidRas": [
+        87.861,
+        27.017,
+        -17.24
+      ],
+      "centroidThree": [
+        0.9919,
+        -0.2126,
+        0.2558
+      ],
+      "bboxThreeMin": [
+        0.3328,
+        -0.3753,
+        -0.6811
+      ],
+      "bboxThreeMax": [
+        1.6344,
+        0.0021,
+        1.1621
+      ],
+      "triangles": 7998,
+      "segVoxels": 24822
+    },
+    "LateralMeniscus": {
+      "labelIndex": 10,
+      "centroidRas": [
+        137.221,
+        14.202,
+        -11.584
+      ],
+      "centroidThree": [
+        -0.9825,
+        0.0136,
+        -0.2568
+      ],
+      "bboxThreeMin": [
+        -1.6317,
+        -0.1904,
+        -0.9371
+      ],
+      "bboxThreeMax": [
+        -0.199,
+        0.2349,
+        0.4973
+      ],
+      "triangles": 8000,
+      "segVoxels": 29312
+    },
+    "Fibula": {
+      "labelIndex": 3,
+      "centroidRas": [
+        154.02,
+        1.825,
+        -51.32
+      ],
+      "centroidThree": [
+        -1.6545,
+        -1.5758,
+        -0.7519
+      ],
+      "bboxThreeMin": [
+        -2.1484,
+        -2.651,
+        -1.32
+      ],
+      "bboxThreeMax": [
+        -1.1868,
+        -0.7237,
+        -0.1287
+      ],
+      "triangles": 7000,
+      "segVoxels": 56779
+    },
+    "ACL": {
+      "labelIndex": 11,
+      "centroidRas": [
+        112.508,
+        26.888,
+        1.119
+      ],
+      "centroidThree": [
+        0.006,
+        0.5217,
+        0.2507
+      ],
+      "bboxThreeMin": [
+        -0.2165,
+        -0.0823,
+        -0.2054
+      ],
+      "bboxThreeMax": [
+        0.2266,
+        1.1613,
+        0.6853
+      ],
+      "triangles": 2400,
+      "segVoxels": 8502
+    },
+    "PCL": {
+      "labelIndex": 12,
+      "centroidRas": [
+        113.823,
+        20.077,
+        -10.18
+      ],
+      "centroidThree": [
+        -0.0466,
+        0.0698,
+        -0.0218
+      ],
+      "bboxThreeMin": [
+        -0.7204,
+        -0.5024,
+        -0.8568
+      ],
+      "bboxThreeMax": [
+        0.4099,
+        0.6261,
+        0.5729
+      ],
+      "triangles": 2400,
+      "segVoxels": 6074
+    },
+    "MCL": {
+      "labelIndex": 13,
+      "centroidRas": [
+        68.344,
+        15.212,
+        -16.36
+      ],
+      "centroidThree": [
+        1.7726,
+        -0.1774,
+        -0.2164
+      ],
+      "bboxThreeMin": [
+        1.3162,
+        -1.227,
+        -0.5386
+      ],
+      "bboxThreeMax": [
+        2.183,
+        0.8435,
+        0.0755
+      ],
+      "triangles": 5000,
+      "segVoxels": 44799
+    },
+    "LCL": {
+      "labelIndex": 14,
+      "centroidRas": [
+        158.787,
+        9.239,
+        -13.217
+      ],
+      "centroidThree": [
+        -1.8451,
+        -0.0517,
+        -0.4553
+      ],
+      "bboxThreeMin": [
+        -2.1476,
+        -1.1496,
+        -0.7289
+      ],
+      "bboxThreeMax": [
+        -1.573,
+        0.8832,
+        -0.1578
+      ],
+      "triangles": 2398,
+      "segVoxels": 3841
+    },
+    "PatellarTendon": {
+      "labelIndex": 15,
+      "centroidRas": [
+        121.153,
+        62.911,
+        -22.383
+      ],
+      "centroidThree": [
+        -0.3398,
+        -0.4183,
+        1.6916
+      ],
+      "bboxThreeMin": [
+        -0.9548,
+        -1.8998,
+        1.1302
+      ],
+      "bboxThreeMax": [
+        0.2507,
+        0.9481,
+        2.3991
+      ],
+      "triangles": 5500,
+      "segVoxels": 80707
+    },
+    "QuadricepsTendon": {
+      "labelIndex": 16,
+      "centroidRas": [
+        123.07,
+        71.426,
+        48.033
+      ],
+      "centroidThree": [
+        -0.4165,
+        2.3983,
+        2.0322
+      ],
+      "bboxThreeMin": [
+        -0.9179,
+        1.6066,
+        1.5711
+      ],
+      "bboxThreeMax": [
+        0.1033,
+        3.2409,
+        2.5116
+      ],
+      "triangles": 2975,
+      "segVoxels": 55587
+    },
+    "MedialMeniscusTruncated": {
+      "labelIndex": 9,
+      "centroidRas": [
+        81.02,
+        25.083,
+        -17.952
+      ],
+      "centroidThree": [
+        1.2655,
+        -0.2411,
+        0.1785
+      ],
+      "bboxThreeMin": [
+        0.8255,
+        -0.3753,
+        -0.6811
+      ],
+      "bboxThreeMax": [
+        1.6344,
+        -0.0379,
+        1.0993
+      ],
+      "triangles": 4641,
+      "segVoxels": 0
+    },
+    "BucketHandleFragment": {
+      "labelIndex": 9,
+      "centroidRas": [
+        110.323,
+        28.077,
+        -15.68
+      ],
+      "centroidThree": [
+        0.0934,
+        -0.1502,
+        0.2982
+      ],
+      "bboxThreeMin": [
+        -0.1823,
+        -0.3423,
+        -0.7394
+      ],
+      "bboxThreeMax": [
+        0.3906,
+        0.0242,
+        1.1022
+      ],
+      "triangles": 3357,
+      "segVoxels": 0
+    }
+  }
+}

@@ -19,7 +19,14 @@ app.use(
   express.static(distDir, {
     maxAge: '1h',
     setHeaders(res, filePath) {
-      if (filePath.endsWith('.html')) {
+      if (filePath.endsWith('.nii.gz')) {
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.removeHeader('Content-Encoding');
+      } else if (filePath.endsWith('.glb')) {
+        res.setHeader('Content-Type', 'model/gltf-binary');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      } else if (filePath.endsWith('.html')) {
         res.setHeader('Cache-Control', 'no-cache');
       }
     },

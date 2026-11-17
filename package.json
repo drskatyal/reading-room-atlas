@@ -11,15 +11,17 @@
     "build": "tsc -b && vite build",
     "start": "node server.mjs",
     "test": "vitest run",
-    "lint": "oxlint",
+    "lint": "oxlint src",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fontsource/instrument-serif": "^5.3.0",
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/dm-mono": "^5.3.0",
+    "@fontsource/instrument-sans": "^5.3.0",
+    "@niivue/niivue": "^0.69.0",
     "express": "^5.3.0",
     "lucide-react": "^1.74.0",
+    "motion": "^14.14.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.187.0"

@@ -1,221 +1,229 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CommandPalette } from './components/CommandPalette';
-import { ReelStudioModal } from './components/ReelStudioModal';
-import { SignOutSidecar } from './components/SignOutSidecar';
-import { TopBar } from './components/TopBar';
-import { MODULES_CATALOG } from './data/modulesCatalog';
-import { CarotidDopplerModule } from './modules/CarotidDopplerModule';
-import { KneeMriModule } from './modules/KneeMriModule';
-import { LiverLiradsModule } from './modules/LiverLiradsModule';
-import { TemporalBoneModule } from './modules/TemporalBoneModule';
-import { ThyroidTiradsModule } from './modules/ThyroidTiradsModule';
-import type { ModuleId, StructuredReport, ThemeMode } from './types/radiology';
-
-const INITIAL_REPORT: StructuredReport = {
-  title: 'Loading Module...',
-  modality: 'Workstation',
-  categoryBadge: 'Ready',
-  categoryTone: 'info',
-  technique: '',
-  findings: [],
-  impression: [],
-  recommendation: '',
-  metricsSummary: [],
-};
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FileText, Moon, Sun } from 'lucide-react';
+import { ChapterBar } from './components/ChapterBar';
+import { KneeSpecimen3D } from './components/KneeSpecimen3D';
+import { RealKneeMriViewer } from './components/RealKneeMriViewer';
+import { SignOutDrawer } from './components/SignOutDrawer';
+import { computeKneeKinematics } from './core/coordinates';
+import { buildKneeFellowshipReport, KNEE_CHAPTERS } from './data/kneeClinicalAtlas';
+import type {
+  KneeChapterId,
+  KneeLandmarks,
+  MriContrastPreset,
+  MriPlaneMode,
+  StructureId,
+  ThemeMode,
+  TissueVisibility,
+} from './types/atlas';
 
 export function App() {
-  const [activeModule, setActiveModule] = useState<ModuleId>('knee-mri');
-  const [presetTrigger, setPresetTrigger] = useState<string | undefined>(undefined);
-  const [theme, setTheme] = useState<ThemeMode>('obsidian');
-  const [sidecarCollapsed, setSidecarCollapsed] = useState(false);
-  const [presenterMode, setPresenterMode] = useState(false);
-  const [screenBlanked, setScreenBlanked] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [reelOpen, setReelOpen] = useState(false);
-  const [report, setReport] = useState<StructuredReport>(INITIAL_REPORT);
-  const [toast, setToast] = useState<string | null>(null);
+  const [landmarks, setLandmarks] = useState<KneeLandmarks | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>('darkroom');
+  const [chapterId, setChapterId] = useState<KneeChapterId>('normal-anatomy');
+  const [flexionDeg, setFlexionDeg] = useState<number>(4);
+  const [contrastPreset, setContrastPreset] = useState<MriContrastPreset>('qdess-clinical');
+  const [planeMode, setPlaneMode] = useState<MriPlaneMode>('sagittal');
+  const [activeStructure, setActiveStructure] = useState<StructureId>('ACL');
+  const [targetRasMm, setTargetRasMm] = useState<[number, number, number] | null>(null);
+  const [mriCrosshairRas, setMriCrosshairRas] = useState<[number, number, number] | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const canvasGettersRef = useRef<{
-    get3d: () => HTMLCanvasElement | null;
-    get2d: () => HTMLCanvasElement | null;
-  }>({
-    get3d: () => null,
-    get2d: () => null,
+  const [visibility, setVisibility] = useState<TissueVisibility>({
+    bones: true,
+    xrayBones: false,
+    extensor: true,
+    cartilage: true,
+    thicknessMap: false,
+    menisci: true,
+    cruciates: true,
+    collaterals: true,
+    callouts: false,
+    crossSection: false,
   });
-
-  const handleExposeCanvases = useCallback(
-    (get3d: () => HTMLCanvasElement | null, get2d: () => HTMLCanvasElement | null) => {
-      canvasGettersRef.current = { get3d, get2d };
-    },
-    []
-  );
 
   // Sync theme attribute on <html>
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2200);
+  // Fetch co-registered OpenMSK Right-Knee landmarks & quantitative chondral telemetry
+  useEffect(() => {
+    let active = true;
+    fetch('/data/knee-landmarks.json')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<KneeLandmarks>;
+      })
+      .then((data) => {
+        if (!active) return;
+        setLandmarks(data);
+        const initial = data.structures.ACL?.centroidRas ?? data.jointCenterRas;
+        setTargetRasMm(initial);
+        setMriCrosshairRas(initial);
+      })
+      .catch(() => {
+        // Landmarks fetch errors handled gracefully via fallbacks
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const togglePresenter = useCallback(() => {
-    setPresenterMode((prev) => {
-      const next = !prev;
-      if (next && document.fullscreenEnabled && !document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else if (!next && document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-      showToast(next ? 'Presenter Mode On (Press F to exit)' : 'Workstation Mode Restored');
-      return next;
-    });
-  }, [showToast]);
+  const chapter = useMemo(
+    () => KNEE_CHAPTERS.find((c) => c.id === chapterId) ?? KNEE_CHAPTERS[0],
+    [chapterId]
+  );
 
-  // Global keyboard shortcuts: Ctrl+K, F, B, 1-5
+  const kinematics = useMemo(
+    () =>
+      computeKneeKinematics(
+        flexionDeg,
+        chapterId,
+        landmarks?.threeScale ?? 0.04,
+        landmarks?.laterality ?? 'Right'
+      ),
+    [flexionDeg, chapterId, landmarks?.threeScale, landmarks?.laterality]
+  );
+
+  const report = useMemo(
+    () => buildKneeFellowshipReport(chapterId, flexionDeg, kinematics.anteriorDrawerMm),
+    [chapterId, flexionDeg, kinematics.anteriorDrawerMm]
+  );
+
+  const selectChapter = useCallback(
+    (id: KneeChapterId) => {
+      const next = KNEE_CHAPTERS.find((c) => c.id === id);
+      if (!next) return;
+      setChapterId(next.id);
+      setFlexionDeg(next.defaultFlexionDeg);
+      setContrastPreset(next.defaultContrast);
+      setPlaneMode(next.defaultPlane);
+      setActiveStructure(next.focusStructure);
+      setVisibility((prev) => ({
+        ...prev,
+        extensor: id === 'normal-anatomy',
+        xrayBones: id === 'bucket-handle' || id === 'acl-rupture' || id === 'pcl-dashboard',
+      }));
+      const lm = landmarks?.structures[next.focusStructure]?.centroidRas;
+      if (lm) {
+        setTargetRasMm(lm);
+      }
+    },
+    [landmarks]
+  );
+
+  const toggleVisibility = useCallback((key: keyof TissueVisibility) => {
+    setVisibility((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  // Keyboard shortcuts: 1-6 Chapters | X X-ray Bone | T Thickness Map | L Labels | S MRI Cut | R Dictation
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen((o) => !o);
-        return;
-      }
-
-      if (isTyping || searchOpen || reelOpen) return;
-
-      if (e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        togglePresenter();
-      } else if (e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        setScreenBlanked((b) => !b);
-      } else if (e.key === 'Escape' && screenBlanked) {
-        setScreenBlanked(false);
-      } else if (['1', '2', '3', '4', '5'].includes(e.key)) {
-        const mod = MODULES_CATALOG[Number(e.key) - 1];
-        if (mod) {
-          setActiveModule(mod.id);
-          setPresetTrigger(undefined);
-        }
+      if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        const ch = KNEE_CHAPTERS[Number(e.key) - 1];
+        if (ch) selectChapter(ch.id);
+      } else if (e.key.toLowerCase() === 'x') {
+        toggleVisibility('xrayBones');
+      } else if (e.key.toLowerCase() === 't') {
+        toggleVisibility('thicknessMap');
+      } else if (e.key.toLowerCase() === 'l') {
+        toggleVisibility('callouts');
+      } else if (e.key.toLowerCase() === 's') {
+        toggleVisibility('crossSection');
+      } else if (e.key.toLowerCase() === 'r') {
+        setDrawerOpen((o) => !o);
+      } else if (e.key === 'Escape' && drawerOpen) {
+        setDrawerOpen(false);
       }
     };
-
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [searchOpen, reelOpen, screenBlanked, togglePresenter]);
+  }, [drawerOpen, selectChapter, toggleVisibility]);
 
-  const activeMeta = useMemo(
-    () => MODULES_CATALOG.find((m) => m.id === activeModule) ?? MODULES_CATALOG[0],
-    [activeModule]
-  );
-
-  const handleSelectModule = (id: ModuleId, preset?: string) => {
-    setActiveModule(id);
-    setPresetTrigger(preset);
-  };
+  const handleSelectFrom3D = useCallback((id: StructureId, centroidRas: [number, number, number]) => {
+    setActiveStructure(id);
+    setTargetRasMm(centroidRas);
+  }, []);
 
   return (
-    <div className="app-shell">
-      <TopBar
-        activeModule={activeModule}
-        onSelectModule={(id) => handleSelectModule(id)}
-        theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === 'obsidian' ? 'parchment' : 'obsidian'))}
-        presenterMode={presenterMode}
-        onTogglePresenter={togglePresenter}
-        onTriggerBlank={() => setScreenBlanked(true)}
-        onOpenSearch={() => setSearchOpen(true)}
-        onOpenReelStudio={() => setReelOpen(true)}
-      />
-
-      <div
-        key={activeModule}
-        className={`workspace-frame ${sidecarCollapsed ? 'sidecar-collapsed' : ''} ${presenterMode ? 'presenter-mode' : ''}`}
-      >
-        <div className="module-stage-transition">
-          {activeModule === 'knee-mri' && (
-            <KneeMriModule
-              presetTrigger={presetTrigger}
-              onReportChange={setReport}
-              onExposeCanvases={handleExposeCanvases}
-            />
-          )}
-          {activeModule === 'carotid-doppler' && (
-            <CarotidDopplerModule
-              presetTrigger={presetTrigger}
-              onReportChange={setReport}
-              onExposeCanvases={handleExposeCanvases}
-            />
-          )}
-          {activeModule === 'temporal-bone' && (
-            <TemporalBoneModule
-              presetTrigger={presetTrigger}
-              onReportChange={setReport}
-              onExposeCanvases={handleExposeCanvases}
-            />
-          )}
-          {activeModule === 'thyroid-tirads' && (
-            <ThyroidTiradsModule
-              presetTrigger={presetTrigger}
-              onReportChange={setReport}
-              onExposeCanvases={handleExposeCanvases}
-            />
-          )}
-          {activeModule === 'liver-lirads' && (
-            <LiverLiradsModule
-              presetTrigger={presetTrigger}
-              onReportChange={setReport}
-              onExposeCanvases={handleExposeCanvases}
-            />
-          )}
+    <div className="atlas-shell">
+      <header className="atlas-topbar">
+        <div className="brand-lockup">
+          <h1 className="brand-title">ReadingRoom Atlas</h1>
+          <span className="brand-subtitle">
+            Knee 3T MRI &amp; Meniscal / Cruciate Biomechanics
+          </span>
         </div>
 
-        {!presenterMode && (
-          <SignOutSidecar
-            report={report}
-            pearls={activeMeta.pearls}
-            collapsed={sidecarCollapsed}
-            onToggleCollapse={() => setSidecarCollapsed((c) => !c)}
-          />
-        )}
-      </div>
-
-      <CommandPalette
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onSelectEntry={(modId, preset) => handleSelectModule(modId, preset)}
-      />
-
-      <ReelStudioModal
-        open={reelOpen}
-        onClose={() => setReelOpen(false)}
-        moduleId={activeModule}
-        get3DCanvas={() => canvasGettersRef.current.get3d()}
-        get2DCanvas={() => canvasGettersRef.current.get2d()}
-      />
-
-      {screenBlanked && (
-        <div
-          className="blank-overlay"
-          role="button"
-          tabIndex={0}
-          onClick={() => setScreenBlanked(false)}
-          onKeyDown={() => setScreenBlanked(false)}
-        >
-          <div style={{ fontFamily: 'var(--font-serif)', fontSize: 28, color: '#d4a853' }}>
-            Conference Screen Blanked
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-            Press B, Esc, or Click anywhere to resume
-          </div>
+        <div className="topbar-meta">
+          <span className="specimen-chip" title="Stanford OpenMSK In-Vivo 3T qDESS + Open Knee(s)">
+            In-Vivo 3.0T qDESS · Right Knee
+          </span>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setTheme((t) => (t === 'darkroom' ? 'monograph' : 'darkroom'))}
+            aria-label="Toggle Darkroom or Monograph theme"
+          >
+            {theme === 'darkroom' ? <Sun size={14} /> : <Moon size={14} />}
+            <span>{theme === 'darkroom' ? 'Monograph' : 'Darkroom'}</span>
+          </button>
+          <button
+            type="button"
+            className="icon-btn primary"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <FileText size={14} />
+            <span>Dictation &amp; Pearls</span>
+          </button>
         </div>
-      )}
+      </header>
 
-      {toast && <div className="toast-pill">{toast}</div>}
+      <main className="atlas-stage-grid">
+        <KneeSpecimen3D
+          landmarks={landmarks}
+          chapter={chapter}
+          kinematics={kinematics}
+          theme={theme}
+          activeStructure={activeStructure}
+          onSelectStructure={handleSelectFrom3D}
+          visibility={visibility}
+          onToggleVisibility={toggleVisibility}
+          mriPlaneMode={planeMode}
+          mriCrosshairRas={mriCrosshairRas}
+        />
+
+        <RealKneeMriViewer
+          landmarks={landmarks}
+          contrastPreset={contrastPreset}
+          onContrastChange={setContrastPreset}
+          planeMode={planeMode}
+          onPlaneModeChange={setPlaneMode}
+          activeStructure={activeStructure}
+          targetRasMm={targetRasMm}
+          onRasCrosshairChange={setMriCrosshairRas}
+          onSelectStructureFromMri={setActiveStructure}
+        />
+      </main>
+
+      <ChapterBar
+        chapters={KNEE_CHAPTERS}
+        activeChapterId={chapterId}
+        onSelectChapter={selectChapter}
+        flexionDeg={flexionDeg}
+        onChangeFlexion={setFlexionDeg}
+        kinematics={kinematics}
+      />
+
+      <SignOutDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        chapter={chapter}
+        report={report}
+      />
     </div>
   );
 }

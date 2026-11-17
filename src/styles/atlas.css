@@ -1,0 +1,822 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-telemetry);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+/* Main Frame */
+.atlas-shell {
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr) auto;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-void);
+  color: var(--text-primary);
+}
+
+/* Top Bar */
+.atlas-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 18px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 20;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.brand-subtitle {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.specimen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-stage);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 31px;
+  padding: 0 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    color 180ms var(--ease-out);
+}
+
+.icon-btn:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+}
+
+.icon-btn.primary {
+  background: var(--bg-active);
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+/* 50 / 50 Dual Stage */
+.atlas-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border-subtle);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stage-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-stage);
+  overflow: hidden;
+}
+
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 5px 14px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 8;
+}
+
+.pane-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pane-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pane-note {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seg-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-void);
+}
+
+.seg-btn {
+  position: relative;
+  z-index: 1;
+  padding: 3.5px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition:
+    color 160ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.seg-btn:active {
+  transform: scale(0.97);
+}
+
+.seg-btn.active {
+  color: var(--text-primary);
+}
+
+.seg-indicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: var(--bg-active);
+  border: 1px solid var(--border-active);
+  z-index: -1;
+}
+
+/* 3D Specimen Viewport */
+.specimen-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--stage-radial);
+  overflow: hidden;
+}
+
+.three-host {
+  position: absolute;
+  inset: 0;
+}
+
+.callout-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.callout-line {
+  stroke: rgba(148, 163, 184, 0.45);
+  stroke-width: 1;
+  fill: none;
+  transition:
+    stroke 160ms var(--ease-out),
+    stroke-width 160ms var(--ease-out);
+}
+
+.callout-line.active {
+  stroke: var(--accent-telemetry);
+  stroke-width: 1.6;
+}
+
+.callout-dot {
+  fill: var(--text-secondary);
+}
+
+.callout-dot.active {
+  fill: var(--accent-telemetry);
+}
+
+.callout-pills-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.callout-pill {
+  position: absolute;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    transform 140ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
+}
+
+.callout-pill:active {
+  transform: scale(0.97);
+}
+
+.callout-pill.active {
+  border-color: var(--border-active);
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .callout-pill:hover {
+    border-color: var(--border-active);
+    color: var(--text-primary);
+  }
+}
+
+/* Tissue quick bar inside 3D stage top-left */
+.tissue-strip {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: calc(100% - 24px);
+  z-index: 6;
+}
+
+.chip-toggle {
+  padding: 3.5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+
+.chip-toggle:active {
+  transform: scale(0.97);
+}
+
+.chip-toggle.active {
+  border-color: var(--border-active);
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+/* Quantitative Cartilage Thickness Legend (Bottom Right above Inspector) */
+.thickness-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(10px);
+  z-index: 6;
+  width: 224px;
+}
+
+.thickness-legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.thickness-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #9e1c24 0%,
+    #e07b24 26%,
+    #2ca888 54%,
+    #2b7bba 78%,
+    #9ad7ff 100%
+  );
+}
+
+.thickness-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Selected Structure Floating Card (Bottom of 3D pane) */
+.structure-inspector {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-float);
+  z-index: 6;
+}
+
+.inspector-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.inspector-body {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 68ch;
+}
+
+.inspector-coords {
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-telemetry);
+}
+
+/* NiiVue Real 3T MRI Stage */
+.mri-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #020307;
+  display: flex;
+  flex-direction: column;
+}
+
+.mri-subbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 12px;
+  background: var(--bg-stage);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.niivue-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #020307;
+}
+
+.niivue-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+/* Authentic PACS DICOM Corner Metadata Overlay */
+.pacs-corner {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.38;
+  font-variant-numeric: tabular-nums;
+  color: rgba(226, 232, 240, 0.84);
+  background: rgba(2, 4, 8, 0.56);
+  backdrop-filter: blur(4px);
+  padding: 3px 7px;
+  border-radius: 4px;
+  z-index: 5;
+}
+
+.pacs-tl {
+  top: 10px;
+  left: 12px;
+}
+
+.pacs-tr {
+  top: 10px;
+  right: 12px;
+  text-align: right;
+}
+
+.pacs-bl {
+  bottom: 10px;
+  left: 12px;
+}
+
+.mri-hud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3.5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.mri-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 7px 14px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.slider-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.slider-inline input[type='range'] {
+  width: 112px;
+  accent-color: var(--accent-telemetry);
+}
+
+.mono-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-telemetry);
+}
+
+/* Bottom Chapter & Kinematics Bar */
+.chapter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 16px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  z-index: 15;
+}
+
+.chapter-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.chapter-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.chapter-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5.5px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    transform 140ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background-color 160ms var(--ease-out);
+}
+
+.chapter-pill:active {
+  transform: scale(0.97);
+}
+
+.chapter-pill.active {
+  border-color: var(--border-active);
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.chapter-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-telemetry);
+}
+
+.biomech-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.biomech-readout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-stage);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* Sign-Out & Board Pearls Slide-Over Drawer */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 5, 11, 0.56);
+  backdrop-filter: blur(3px);
+  z-index: 40;
+}
+
+.signout-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(470px, 94vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-active);
+  box-shadow: var(--shadow-float);
+  z-index: 45;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.drawer-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.drawer-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.drawer-section-title {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-telemetry);
+}
+
+.finding-row {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-stage);
+  margin-bottom: 6px;
+}
+
+.finding-row.abnormal {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.finding-comp {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.finding-text {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.pearl-card {
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent-telemetry);
+  background: var(--bg-stage);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-bottom: 8px;
+}
+
+.drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 14, 0.72);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  z-index: 12;
+}
+
+@media (max-width: 1080px) {
+  html,
+  body,
+  #root {
+    overflow: auto;
+  }
+
+  .atlas-shell {
+    height: auto;
+    min-height: 100vh;
+    grid-template-rows: auto auto auto;
+  }
+
+  .atlas-stage-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 58vh 58vh;
+  }
+
+  .chapter-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .biomech-bar {
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
