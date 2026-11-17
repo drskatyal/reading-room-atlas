@@ -46,7 +46,7 @@ npm run start   # Express production server on $PORT (default 3000) with /health
 ## Deploying to Railway
 
 1. Connect this GitHub repository to your Railway project.
-2. Railway automatically uses `railway.json` and `nixpacks.toml` (`npm ci && npm run build`, start `npm run start`, healthcheck `/health`).
+2. Railway automatically uses `railway.json` with Railpack (installs via `npm ci`, builds via `npm run build`, starts `npm run start`, healthcheck `/health`).
 
 ## Using Your OpenAI Codex CLI Subscription Locally
 
