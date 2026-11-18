@@ -474,14 +474,23 @@ export interface SpecimenSyncParams {
     collaterals: boolean;
     plateauDissection?: boolean;
   };
+  enabledStructures?: ReadonlySet<string>;
   chapterId: string;
   activeStructure: string;
   hoveredStructure: string | null;
 }
 
 export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): void {
-  const { meshes, materials, xrayUniform, visibility, chapterId, activeStructure, hoveredStructure } =
-    params;
+  const {
+    meshes,
+    materials,
+    xrayUniform,
+    visibility,
+    enabledStructures,
+    chapterId,
+    activeStructure,
+    hoveredStructure,
+  } = params;
 
   xrayUniform.uXrayMode.value = visibility.xrayBones ? 1.0 : 0.0;
 
@@ -495,32 +504,45 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
     const mat = materials.get(name);
     if (!mat) continue;
 
+    const parentId =
+      name === 'MedialMeniscusTruncated' || name === 'BucketHandleFragment'
+        ? 'MedialMeniscus'
+        : name;
+    const structEnabled = enabledStructures ? enabledStructures.has(parentId) : true;
+
     let shaderDirty = false;
-    if (BONE_NAMES.has(name)) {
-      mesh.visible = visibility.bones && !(plateauOnly && name === 'Femur');
+    if (BONE_NAMES.has(name) || name === 'Patella') {
+      const groupAllowed = name === 'Patella' && !enabledStructures ? visibility.extensor : visibility.bones;
+      mesh.visible =
+        structEnabled &&
+        groupAllowed &&
+        !(plateauOnly && (name === 'Femur' || name === 'Patella'));
       shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
-    } else if (EXTENSOR_NAMES.has(name)) {
-      mesh.visible = visibility.extensor && !plateauOnly;
-      if (name === 'Patella') {
-        shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
-      } else if (name === 'PatellarCartilage') {
-        shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
-      }
-    } else if (CARTILAGE_NAMES.has(name)) {
-      mesh.visible = visibility.cartilage && !(plateauOnly && name === 'FemoralCartilage');
+    } else if (CARTILAGE_NAMES.has(name) || name === 'PatellarCartilage') {
+      const groupAllowed =
+        name === 'PatellarCartilage' && !enabledStructures
+          ? visibility.extensor && visibility.cartilage
+          : visibility.cartilage;
+      mesh.visible =
+        structEnabled &&
+        groupAllowed &&
+        !(plateauOnly && (name === 'FemoralCartilage' || name === 'PatellarCartilage'));
       shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
+    } else if (EXTENSOR_NAMES.has(name)) {
+      mesh.visible = structEnabled && (!enabledStructures ? visibility.extensor : true) && !plateauOnly;
     } else if (MENISCUS_NAMES.has(name)) {
+      const groupAllowed = !enabledStructures ? visibility.menisci : true;
       if (name === 'MedialMeniscus') {
-        mesh.visible = visibility.menisci && !isBucket;
+        mesh.visible = structEnabled && groupAllowed && !isBucket;
       } else if (name === 'MedialMeniscusTruncated' || name === 'BucketHandleFragment') {
-        mesh.visible = visibility.menisci && isBucket;
+        mesh.visible = structEnabled && groupAllowed && isBucket;
       } else {
-        mesh.visible = visibility.menisci;
+        mesh.visible = structEnabled && groupAllowed;
       }
     } else if (CRUCIATE_NAMES.has(name)) {
-      mesh.visible = visibility.cruciates;
+      mesh.visible = structEnabled && (!enabledStructures ? visibility.cruciates : true);
     } else if (COLLATERAL_NAMES.has(name)) {
-      mesh.visible = visibility.collaterals;
+      mesh.visible = structEnabled && (!enabledStructures ? visibility.collaterals : true);
     }
 
     const isSelected =

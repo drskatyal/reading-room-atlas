@@ -79,6 +79,8 @@ export type MeniscalTearMorphology =
 
 export type ThemeMode = 'darkroom' | 'monograph';
 
+export type LayerSelectMode = 'multiple' | 'single';
+
 export type AppWorkspaceMode =
   | 'anatomy'
   | 'fullscreen-3d'
@@ -310,8 +312,6 @@ export interface ReportingChecklistCard {
   normalLook: string;
   pathologySigns: string[];
   gradingOrRule: string;
-  dictationNormal: string;
-  dictationAbnormal: string;
   linkedMode?: 'anatomy' | 'pathology';
   linkedModuleId?: KneeModuleId;
   linkedStructureId?: StructureId;

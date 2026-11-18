@@ -1,26 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, FileText, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnatomySidebar } from './components/AnatomySidebar';
 import { EditorialGuidePanel } from './components/EditorialGuidePanel';
-import { FullScreen3DView } from './components/FullScreen3DView';
+import { FullScreen3DOverlay } from './components/FullScreen3DView';
 import { KneeSpecimen3D } from './components/KneeSpecimen3D';
 import { MriReportingGuidePage } from './components/MriReportingGuidePage';
 import { PathologySidebar } from './components/PathologySidebar';
 import { RealKneeMriViewer } from './components/RealKneeMriViewer';
-import { SignOutDrawer } from './components/SignOutDrawer';
 import { TopModuleBar } from './components/TopModuleBar';
 import { computeKneeKinematics } from './core/coordinates';
 import {
+  ALL_STRUCTURE_IDS,
   ANATOMY_SYSTEM_GROUPS,
+  LAYER_GROUPS,
   modeToPath,
   PATIENT_DEMO_PRESETS,
   pathToMode,
 } from './data/anatomyAndReportingData';
 import {
-  buildKneeFellowshipReport,
   KNEE_MODULES,
   RESIDENT_QUIZ_QUESTIONS,
-  STRUCTURES_INFO,
 } from './data/kneeClinicalAtlas';
 import type {
   AnatomyLandmarkItem,
@@ -29,6 +27,7 @@ import type {
   KneeLandmarks,
   KneeModule,
   KneeModuleId,
+  LayerSelectMode,
   MriAnnotation,
   MriContrastPreset,
   MriOverlayMode,
@@ -38,10 +37,11 @@ import type {
   SpecimenViewMode,
   StructureId,
   ThemeMode,
+  TissueGroup,
   TissueVisibility,
 } from './types/atlas';
 
-const DEFAULT_VISIBILITY: TissueVisibility = {
+const BASE_VISIBILITY: TissueVisibility = {
   bones: true,
   xrayBones: false,
   extensor: true,
@@ -74,17 +74,21 @@ export function App() {
   );
   const [lastDualMode, setLastDualMode] = useState<'anatomy' | 'pathology'>('anatomy');
   const [theme, setTheme] = useState<ThemeMode>('darkroom');
+  const fsHostRef = useRef<HTMLDivElement | null>(null);
 
-  // Module & sub-step state (used by Pathology, Fullscreen Demo, Quiz)
+  // Module & sub-step state (Pathology, Fullscreen Demo, Quiz)
   const [moduleId, setModuleId] = useState<KneeModuleId>(() =>
     typeof window !== 'undefined' && pathToMode(window.location.pathname) === 'pathology'
       ? FIRST_PATHOLOGY_MODULE.id
       : 'normal-overview'
   );
   const [subStepIndex, setSubStepIndex] = useState(0);
-  const [visitedModules, setVisitedModules] = useState<Set<KneeModuleId>>(
-    () => new Set([FIRST_PATHOLOGY_MODULE.id])
+
+  // Individual structure visibility + Multi/Single layer mode
+  const [enabledStructures, setEnabledStructures] = useState<Set<StructureId>>(
+    () => new Set(ALL_STRUCTURE_IDS)
   );
+  const [layerMode, setLayerMode] = useState<LayerSelectMode>('multiple');
 
   // Anatomy mode state
   const [activeLandmark, setActiveLandmark] = useState<AnatomyLandmarkItem>(
@@ -97,13 +101,12 @@ export function App() {
   const [activeDemoPresetId, setActiveDemoPresetId] = useState<string>(
     PATIENT_DEMO_PRESETS[0].id
   );
-  const [captionVisible, setCaptionVisible] = useState(true);
+  const [hideFull3DPins, setHideFull3DPins] = useState(false);
 
   // Synchronized 3D + MRI state
   const [viewMode, setViewMode] = useState<SpecimenViewMode>(
     INITIAL_ANATOMY_LANDMARK.viewMode3D
   );
-  const [visibility, setVisibility] = useState<TissueVisibility>(DEFAULT_VISIBILITY);
   const [cameraPreset, setCameraPreset] = useState<CameraPresetKey>(
     INITIAL_ANATOMY_LANDMARK.cameraPreset
   );
@@ -133,13 +136,12 @@ export function App() {
   const [showTargetPointer, setShowTargetPointer] = useState(true);
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [showSlicePlane, setShowSlicePlane] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Active Recall Quiz state
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
 
-  // Load OpenMSK 3T landmarks JSON
+  // Load OpenMSK 3T landmarks JSON once
   useEffect(() => {
     let cancelled = false;
     fetch('/data/knee-landmarks.json')
@@ -190,26 +192,79 @@ export function App() {
     }
   }, []);
 
-  const applyAnatomyLandmark = useCallback(
-    (item: AnatomyLandmarkItem) => {
-      setActiveLandmark(item);
-      setCustomMriAnnotations(item.mriAnnotations);
-      setModuleId('normal-overview');
-      setSubStepIndex(0);
-      setViewMode(item.viewMode3D);
-      setCameraPreset(item.cameraPreset);
-      setCameraDistanceScale(item.cameraDistanceScale ?? 1.04);
-      setCameraTrigger((t) => t + 1);
-      setMriPlane(item.mriPlane);
-      setMriContrast(item.mriContrast);
-      setMriZoom(item.mriZoom);
-      setFlexionDeg(6);
-      setPatellaSubluxation(0);
-      setActiveStructure(item.structureId);
-      setTargetRasOverride(item.targetRas);
-      setTargetBadge(item.label);
+  const enableAllStructures = useCallback(() => {
+    setEnabledStructures(new Set(ALL_STRUCTURE_IDS));
+  }, []);
+
+  const handleToggleStructure = useCallback(
+    (id: StructureId) => {
+      if (layerMode === 'single') {
+        setEnabledStructures(new Set([id]));
+        return;
+      }
+      setEnabledStructures((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
     },
-    []
+    [layerMode]
+  );
+
+  const handleIsolateStructure = useCallback((id: StructureId) => {
+    setEnabledStructures(new Set([id]));
+  }, []);
+
+  const applyAnatomyLandmark = useCallback((item: AnatomyLandmarkItem) => {
+    setActiveLandmark(item);
+    setCustomMriAnnotations(item.mriAnnotations);
+    setModuleId('normal-overview');
+    setSubStepIndex(0);
+    setViewMode(item.viewMode3D);
+    setCameraPreset(item.cameraPreset);
+    setCameraDistanceScale(item.cameraDistanceScale ?? 1.04);
+    setCameraTrigger((t) => t + 1);
+    setMriPlane(item.mriPlane);
+    setMriContrast(item.mriContrast);
+    setMriZoom(item.mriZoom);
+    setFlexionDeg(6);
+    setPatellaSubluxation(0);
+    setActiveStructure(item.structureId);
+    setTargetRasOverride(item.targetRas);
+    setTargetBadge(item.label);
+    setEnabledStructures((prev) => {
+      if (prev.has(item.structureId)) return prev;
+      const next = new Set(prev);
+      next.add(item.structureId);
+      return next;
+    });
+  }, []);
+
+  const handleToggleLayerGroup = useCallback(
+    (groupId: TissueGroup) => {
+      const group = LAYER_GROUPS.find((g) => g.id === groupId);
+      if (!group) return;
+
+      if (layerMode === 'single') {
+        setEnabledStructures(new Set(group.structures));
+        if (workspaceMode === 'anatomy' && group.structures.length > 0) {
+          applyAnatomyLandmark(findDefaultLandmarkForStructure(group.structures[0]));
+        }
+        return;
+      }
+
+      setEnabledStructures((prev) => {
+        const next = new Set(prev);
+        const allOn = group.structures.every((s) => next.has(s));
+        for (const s of group.structures) {
+          if (allOn) next.delete(s);
+          else next.add(s);
+        }
+        return next;
+      });
+    },
+    [layerMode, workspaceMode, applyAnatomyLandmark]
   );
 
   const applySubStep = useCallback((mod: KneeModule, nextIdx: number) => {
@@ -218,12 +273,6 @@ export function App() {
     setCustomMriAnnotations(undefined);
     setModuleId(mod.id);
     setSubStepIndex(safeIdx);
-    setVisitedModules((prev) => {
-      if (prev.has(mod.id)) return prev;
-      const next = new Set(prev);
-      next.add(mod.id);
-      return next;
-    });
     setViewMode(step.viewMode3D);
     setCameraPreset(step.cameraPreset);
     setCameraDistanceScale(step.cameraDistanceScale ?? 1.05);
@@ -262,12 +311,13 @@ export function App() {
     (id: KneeModuleId) => {
       const mod = KNEE_MODULES.find((m) => m.id === id);
       if (mod) {
+        enableAllStructures();
         applySubStep(mod, 0);
         const matchPreset = PATIENT_DEMO_PRESETS.find((p) => p.moduleId === mod.id);
         if (matchPreset) setActiveDemoPresetId(matchPreset.id);
       }
     },
-    [applySubStep]
+    [enableAllStructures, applySubStep]
   );
 
   const handleSelectPatientPreset = useCallback(
@@ -294,12 +344,14 @@ export function App() {
         return;
       }
       if (mode === 'pathology') {
+        enableAllStructures();
         const mod =
           activeModule.category === 'pathology' ? activeModule : FIRST_PATHOLOGY_MODULE;
         applySubStep(mod, activeModule.category === 'pathology' ? subStepIndex : 0);
         return;
       }
       if (mode === 'quiz') {
+        enableAllStructures();
         applyQuizQuestion(quizIndex);
         return;
       }
@@ -314,6 +366,7 @@ export function App() {
       pushRouteForMode,
       applyAnatomyLandmark,
       activeLandmark,
+      enableAllStructures,
       activeModule,
       applySubStep,
       subStepIndex,
@@ -323,11 +376,9 @@ export function App() {
     ]
   );
 
-  // Sync browser Back/Forward history navigation
   useEffect(() => {
     const onPopState = () => {
-      const mode = pathToMode(window.location.pathname);
-      setWorkspaceMode(mode);
+      setWorkspaceMode(pathToMode(window.location.pathname));
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -338,6 +389,7 @@ export function App() {
       setWorkspaceMode(targetMode);
       setLastDualMode(targetMode);
       pushRouteForMode(targetMode);
+      enableAllStructures();
       if (targetMode === 'pathology' && targetModId) {
         const mod = KNEE_MODULES.find((m) => m.id === targetModId) ?? FIRST_PATHOLOGY_MODULE;
         applySubStep(mod, 0);
@@ -348,7 +400,7 @@ export function App() {
         applyAnatomyLandmark(item);
       }
     },
-    [pushRouteForMode, applySubStep, applyAnatomyLandmark]
+    [pushRouteForMode, enableAllStructures, applySubStep, applyAnatomyLandmark]
   );
 
   const handleToggleFullScreen3D = useCallback(() => {
@@ -359,7 +411,6 @@ export function App() {
     }
   }, [workspaceMode, lastDualMode, handleWorkspaceModeChange]);
 
-  // Global keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -369,8 +420,6 @@ export function App() {
         setShowAllLabels((v) => !v);
       } else if (key === 'h') {
         setShowTargetPointer((v) => !v);
-      } else if (key === 'r') {
-        setDrawerOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -452,11 +501,6 @@ export function App() {
     ]
   );
 
-  const fellowshipReport = useMemo(
-    () => buildKneeFellowshipReport(activeModule.id, flexionDeg, kinematics.anteriorDrawerMm),
-    [activeModule.id, flexionDeg, kinematics.anteriorDrawerMm]
-  );
-
   const quizCandidateStructures = useMemo<StructureId[] | undefined>(() => {
     if (workspaceMode !== 'quiz' || activeQuiz.kind !== 'locate') return undefined;
     const ids = activeQuiz.options.map((o) => o.id) as StructureId[];
@@ -466,7 +510,10 @@ export function App() {
     return ids;
   }, [workspaceMode, activeQuiz]);
 
-  const structInfo = STRUCTURES_INFO[activeStructure];
+  const isGuidePage = workspaceMode === 'report-guide';
+  const isFullScreen3D = workspaceMode === 'fullscreen-3d';
+  const hasLeftSidebar =
+    workspaceMode === 'anatomy' || workspaceMode === 'pathology' || workspaceMode === 'quiz';
   const xrayBones = viewMode === 'joint-interior';
 
   return (
@@ -474,30 +521,91 @@ export function App() {
       <TopModuleBar
         workspaceMode={workspaceMode}
         onChangeWorkspaceMode={handleWorkspaceModeChange}
-        drawerOpen={drawerOpen}
-        onToggleDrawer={() => setDrawerOpen((d) => !d)}
         theme={theme}
         onToggleTheme={() => setTheme((t) => (t === 'darkroom' ? 'monograph' : 'darkroom'))}
       />
 
-      {workspaceMode === 'report-guide' ? (
+      {/* Dedicated How to Report MRI Webpage */}
+      {isGuidePage && (
         <main className="atlas-stage-layout full-width">
           <MriReportingGuidePage onJumpToModule={handleJumpFromGuide} />
         </main>
-      ) : workspaceMode === 'fullscreen-3d' ? (
-        <main className="atlas-stage-layout full-width">
-          <FullScreen3DView
+      )}
+
+      {/* Persistent Zero-Lag WebGL Stage (stays mounted across ALL mode transitions!) */}
+      <main
+        className={`atlas-stage-layout workstation-persistent ${
+          workspaceMode === 'pathology'
+            ? 'with-pathology-sidebar'
+            : hasLeftSidebar
+              ? 'with-left-sidebar'
+              : 'full-width'
+        } ${isGuidePage ? 'is-hidden' : ''}`}
+      >
+        {workspaceMode === 'anatomy' && (
+          <AnatomySidebar
+            activeLandmark={activeLandmark}
+            activeStructure={activeStructure}
+            onSelectLandmark={applyAnatomyLandmark}
+            enabledStructures={enabledStructures}
+            layerMode={layerMode}
+            onChangeLayerMode={setLayerMode}
+            onToggleStructure={handleToggleStructure}
+            onToggleLayerGroup={handleToggleLayerGroup}
+            onIsolateStructure={handleIsolateStructure}
+            onEnableAllStructures={enableAllStructures}
+            xrayBones={xrayBones}
+            onToggleXrayBones={() =>
+              setViewMode((v) => (v === 'joint-interior' ? 'solid' : 'joint-interior'))
+            }
+            showAllLabels={showAllLabels}
+            onToggleAllLabels={() => setShowAllLabels((v) => !v)}
+            mriOverlayMode={mriOverlayMode}
+            onChangeMriOverlayMode={setMriOverlayMode}
+          />
+        )}
+
+        {workspaceMode === 'pathology' && (
+          <PathologySidebar
+            activeModuleId={activeModule.id}
+            subStepIndex={subStepIndex}
+            onSelectModule={handleSelectPathologyModule}
+            onSelectSubStep={(idx) => applySubStep(activeModule, idx)}
+            flexionDeg={flexionDeg}
+            onChangeFlexionDeg={setFlexionDeg}
+            patellaSubluxation={patellaSubluxation}
+            onChangePatellaSubluxation={setPatellaSubluxation}
+            onOpenReportGuide={() => handleWorkspaceModeChange('report-guide')}
+          />
+        )}
+
+        {workspaceMode === 'quiz' && (
+          <EditorialGuidePanel
+            quizQuestion={activeQuiz}
+            quizIndex={quizIndex}
+            quizAnswers={quizAnswers}
+            onSelectQuizQuestion={applyQuizQuestion}
+            onAnswerQuiz={handleAnswerQuizOption}
+            onResetQuiz={() => setQuizAnswers({})}
+          />
+        )}
+
+        <div
+          ref={fsHostRef}
+          className={`viewports-split ${isFullScreen3D ? 'single-3d-fill' : ''}`}
+        >
+          <KneeSpecimen3D
             landmarks={landmarks}
-            activePresetId={activeDemoPresetId}
-            onSelectPreset={handleSelectPatientPreset}
-            moduleId={activeModule.id}
-            subStepId={activeSubStep.id}
+            moduleId={effectiveModuleId}
+            subStepId={effectiveSubStepId}
+            meniscalTearMorphology={effectiveTearMorphology}
             targetRasOverride={targetRasOverride}
             targetBadge={targetBadge}
             viewMode={viewMode}
             onChangeViewMode={setViewMode}
-            visibility={visibility}
-            onChangeVisibility={setVisibility}
+            visibility={BASE_VISIBILITY}
+            enabledStructures={enabledStructures}
+            paused={isGuidePage}
             cameraPreset={cameraPreset}
             cameraDistanceScale={cameraDistanceScale}
             cameraTrigger={cameraTrigger}
@@ -509,9 +617,6 @@ export function App() {
             activeStructure={activeStructure}
             onSelectStructure={handleManualStructureSelect}
             flexionDeg={flexionDeg}
-            onChangeFlexionDeg={setFlexionDeg}
-            patellaSubluxation={patellaSubluxation}
-            onChangePatellaSubluxation={setPatellaSubluxation}
             kinematics={kinematics}
             showAllLabels={showAllLabels}
             onToggleAllLabels={() => setShowAllLabels((v) => !v)}
@@ -520,188 +625,61 @@ export function App() {
             mriSliceRas={mriSliceRas}
             mriPlane={mriPlane}
             theme={theme}
-            onExitFullScreenMode={handleToggleFullScreen3D}
+            hideLabels={quizHideTarget || (isFullScreen3D && hideFull3DPins)}
+            isFullScreenPage={isFullScreen3D}
+            onToggleFullScreenPage={handleToggleFullScreen3D}
+            onQuizStructureClick={handleQuizLocateClick}
           />
-        </main>
-      ) : (
-        <main className="atlas-stage-layout with-left-sidebar">
-          {workspaceMode === 'anatomy' && (
-            <AnatomySidebar
-              activeLandmarkId={activeLandmark.id}
-              activeStructure={activeStructure}
-              onSelectLandmark={applyAnatomyLandmark}
-              visibility={visibility}
-              onToggleVisibilityKey={(key) =>
-                setVisibility((prev) => ({ ...prev, [key]: !prev[key] }))
-              }
-              onResetVisibility={() => setVisibility(DEFAULT_VISIBILITY)}
-              xrayBones={xrayBones}
-              onToggleXrayBones={() =>
-                setViewMode((v) => (v === 'joint-interior' ? 'solid' : 'joint-interior'))
-              }
-              showAllLabels={showAllLabels}
-              onToggleAllLabels={() => setShowAllLabels((v) => !v)}
-              mriOverlayMode={mriOverlayMode}
-              onChangeMriOverlayMode={setMriOverlayMode}
-            />
-          )}
 
-          {workspaceMode === 'pathology' && (
-            <PathologySidebar
-              activeModuleId={activeModule.id}
-              subStepIndex={subStepIndex}
-              visitedModules={visitedModules}
-              onSelectModule={handleSelectPathologyModule}
-              onSelectSubStep={(idx) => applySubStep(activeModule, idx)}
+          <div className={`mri-pane-slot ${isFullScreen3D ? 'is-hidden' : ''}`}>
+            <RealKneeMriViewer
+              landmarks={landmarks}
+              contrastPreset={mriContrast}
+              onContrastChange={setMriContrast}
+              planeMode={mriPlane}
+              onPlaneModeChange={setMriPlane}
+              mriZoom={mriZoom}
+              onMriZoomChange={setMriZoom}
+              targetRasMm={targetRasMm}
+              targetBadge={targetBadge}
+              mriAnnotations={effectiveAnnotations}
+              showTargetPointer={showTargetPointer}
+              onToggleTargetPointer={() => setShowTargetPointer((v) => !v)}
+              hideTargetForQuiz={quizHideTarget}
+              quizCandidateStructures={quizCandidateStructures}
+              overlayModeProp={workspaceMode === 'anatomy' ? mriOverlayMode : undefined}
+              onOverlayModeChange={
+                workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
+              }
+              hidden={isGuidePage || isFullScreen3D}
+              onRasCrosshairChange={setMriSliceRas}
+              onSelectStructureFromMri={handleManualStructureSelect}
+              onQuizMriClick={handleQuizLocateClick}
+            />
+          </div>
+
+          {isFullScreen3D && (
+            <FullScreen3DOverlay
+              hostElement={fsHostRef.current}
+              activePresetId={activeDemoPresetId}
+              onSelectPreset={handleSelectPatientPreset}
+              moduleId={activeModule.id}
               flexionDeg={flexionDeg}
               onChangeFlexionDeg={setFlexionDeg}
               patellaSubluxation={patellaSubluxation}
               onChangePatellaSubluxation={setPatellaSubluxation}
-              onOpenReportGuide={() => handleWorkspaceModeChange('report-guide')}
+              enabledStructures={enabledStructures}
+              layerMode={layerMode}
+              onChangeLayerMode={setLayerMode}
+              onToggleStructure={handleToggleStructure}
+              onToggleLayerGroup={handleToggleLayerGroup}
+              onEnableAllStructures={enableAllStructures}
+              hideLabels={hideFull3DPins}
+              onToggleHideLabels={() => setHideFull3DPins((v) => !v)}
             />
           )}
-
-          {workspaceMode === 'quiz' && (
-            <EditorialGuidePanel
-              quizQuestion={activeQuiz}
-              quizIndex={quizIndex}
-              quizAnswers={quizAnswers}
-              onSelectQuizQuestion={applyQuizQuestion}
-              onAnswerQuiz={handleAnswerQuizOption}
-              onResetQuiz={() => setQuizAnswers({})}
-            />
-          )}
-
-          <div className="dual-center-col">
-            <div className="viewports-split">
-              <KneeSpecimen3D
-                landmarks={landmarks}
-                moduleId={effectiveModuleId}
-                subStepId={effectiveSubStepId}
-                meniscalTearMorphology={effectiveTearMorphology}
-                targetRasOverride={targetRasOverride}
-                targetBadge={targetBadge}
-                viewMode={viewMode}
-                onChangeViewMode={setViewMode}
-                visibility={visibility}
-                onChangeVisibility={setVisibility}
-                cameraPreset={cameraPreset}
-                cameraDistanceScale={cameraDistanceScale}
-                cameraTrigger={cameraTrigger}
-                onSelectCameraPreset={(preset) => {
-                  setCameraPreset(preset);
-                  setCameraDistanceScale(1.05);
-                  setCameraTrigger((t) => t + 1);
-                }}
-                activeStructure={activeStructure}
-                onSelectStructure={handleManualStructureSelect}
-                flexionDeg={flexionDeg}
-                kinematics={kinematics}
-                showAllLabels={showAllLabels}
-                onToggleAllLabels={() => setShowAllLabels((v) => !v)}
-                showSlicePlane={showSlicePlane}
-                onToggleSlicePlane={() => setShowSlicePlane((v) => !v)}
-                mriSliceRas={mriSliceRas}
-                mriPlane={mriPlane}
-                theme={theme}
-                hideLabels={quizHideTarget}
-                onToggleFullScreenPage={handleToggleFullScreen3D}
-                onQuizStructureClick={handleQuizLocateClick}
-              />
-
-              <RealKneeMriViewer
-                landmarks={landmarks}
-                contrastPreset={mriContrast}
-                onContrastChange={setMriContrast}
-                planeMode={mriPlane}
-                onPlaneModeChange={setMriPlane}
-                mriZoom={mriZoom}
-                onMriZoomChange={setMriZoom}
-                targetRasMm={targetRasMm}
-                targetBadge={targetBadge}
-                mriAnnotations={effectiveAnnotations}
-                showTargetPointer={showTargetPointer}
-                onToggleTargetPointer={() => setShowTargetPointer((v) => !v)}
-                hideTargetForQuiz={quizHideTarget}
-                quizCandidateStructures={quizCandidateStructures}
-                overlayModeProp={workspaceMode === 'anatomy' ? mriOverlayMode : undefined}
-                onOverlayModeChange={
-                  workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
-                }
-                onRasCrosshairChange={setMriSliceRas}
-                onSelectStructureFromMri={handleManualStructureSelect}
-                onQuizMriClick={handleQuizLocateClick}
-              />
-            </div>
-
-            {/* Slim Dismissible Bottom Bar (Anatomy or Pathology only) */}
-            {workspaceMode !== 'quiz' &&
-              (captionVisible ? (
-                <div className="quick-caption-bar">
-                  {workspaceMode === 'anatomy' ? (
-                    <div className="caption-main">
-                      <span className="caption-pill">{activeLandmark.label}</span>
-                      <span className="caption-text">{activeLandmark.keyFact}</span>
-                      {structInfo && (
-                        <span className="caption-meta">· Attachments: {structInfo.attachmentSummary}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="caption-main">
-                      <span className="caption-pill patho">{activeSubStep.label}</span>
-                      <span className="caption-text">{activeSubStep.whatToLookFor}</span>
-                    </div>
-                  )}
-
-                  <div className="caption-actions">
-                    <button
-                      type="button"
-                      className="mini-chip"
-                      onClick={() => handleWorkspaceModeChange('report-guide')}
-                    >
-                      <BookOpen size={11} />
-                      <span>Reporting Guide</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="mini-chip"
-                      onClick={() => setDrawerOpen(true)}
-                    >
-                      <FileText size={11} />
-                      <span>Dictation</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="caption-close-btn"
-                      onClick={() => setCaptionVisible(false)}
-                      title="Hide bottom note bar"
-                      aria-label="Hide bottom note bar"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="quick-caption-reopen">
-                  <button
-                    type="button"
-                    className="mini-chip"
-                    onClick={() => setCaptionVisible(true)}
-                  >
-                    Show Key Note
-                  </button>
-                </div>
-              ))}
-          </div>
-        </main>
-      )}
-
-      <SignOutDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        chapter={activeModule}
-        report={fellowshipReport}
-      />
+        </div>
+      </main>
     </div>
   );
 }

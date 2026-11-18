@@ -2,7 +2,6 @@ import {
   Activity,
   BookOpen,
   ClipboardCheck,
-  FileText,
   GraduationCap,
   Layers2,
   Maximize2,
@@ -14,8 +13,6 @@ import type { AppWorkspaceMode, ThemeMode } from '../types/atlas';
 interface TopModuleBarProps {
   workspaceMode: AppWorkspaceMode;
   onChangeWorkspaceMode: (mode: AppWorkspaceMode) => void;
-  drawerOpen: boolean;
-  onToggleDrawer: () => void;
   theme: ThemeMode;
   onToggleTheme: () => void;
 }
@@ -31,13 +28,9 @@ const MODE_TABS: Array<{ id: AppWorkspaceMode; label: string }> = [
 export function TopModuleBar({
   workspaceMode,
   onChangeWorkspaceMode,
-  drawerOpen,
-  onToggleDrawer,
   theme,
   onToggleTheme,
 }: TopModuleBarProps) {
-  const showDictation = workspaceMode === 'anatomy' || workspaceMode === 'pathology';
-
   return (
     <header className="top-nav-shell">
       <div className="atlas-topbar">
@@ -76,24 +69,12 @@ export function TopModuleBar({
         </nav>
 
         <div className="topbar-actions">
-          {showDictation && (
-            <button
-              type="button"
-              className={`chip-btn ${drawerOpen ? 'active' : ''}`}
-              onClick={onToggleDrawer}
-              title="Open structured dictation & board pearls (R)"
-            >
-              <FileText size={13} />
-              <span>Dictation</span>
-            </button>
-          )}
-
           {workspaceMode === 'report-guide' && (
             <button
               type="button"
               className="chip-btn"
               onClick={() => onChangeWorkspaceMode('pathology')}
-              title="Jump back to 3D + MRI pathologies"
+              title="Open 3D + MRI viewer"
             >
               <ClipboardCheck size={13} />
               <span>Open Viewer</span>

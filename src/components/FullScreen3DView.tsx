@@ -1,198 +1,121 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
-  Columns2,
   EyeOff,
+  Layers,
   Maximize,
   Minimize,
-  Sparkles,
-  UserCheck,
+  RotateCcw,
 } from 'lucide-react';
-import { PATIENT_DEMO_PRESETS } from '../data/anatomyAndReportingData';
+import {
+  ANATOMY_SYSTEM_GROUPS,
+  LAYER_GROUPS,
+  PATIENT_DEMO_PRESETS,
+} from '../data/anatomyAndReportingData';
 import type {
-  CameraPresetKey,
-  KneeKinematics,
-  KneeLandmarks,
-  KneeModuleId,
-  MriPlaneMode,
+  LayerSelectMode,
   PatientDemoPreset,
-  SpecimenViewMode,
   StructureId,
-  ThemeMode,
-  TissueVisibility,
+  TissueGroup,
 } from '../types/atlas';
-import { KneeSpecimen3D } from './KneeSpecimen3D';
 
-interface FullScreen3DViewProps {
-  landmarks: KneeLandmarks | null;
+interface FullScreen3DOverlayProps {
+  hostElement: HTMLDivElement | null;
   activePresetId: string;
   onSelectPreset: (preset: PatientDemoPreset) => void;
-  moduleId: KneeModuleId;
-  subStepId: string;
-  targetRasOverride?: [number, number, number];
-  targetBadge?: string;
-  viewMode: SpecimenViewMode;
-  onChangeViewMode: (mode: SpecimenViewMode) => void;
-  visibility: TissueVisibility;
-  onChangeVisibility: (next: TissueVisibility) => void;
-  cameraPreset: CameraPresetKey;
-  cameraDistanceScale?: number;
-  cameraTrigger: number;
-  onSelectCameraPreset: (preset: CameraPresetKey) => void;
-  activeStructure: StructureId;
-  onSelectStructure: (id: StructureId) => void;
+  moduleId: string;
   flexionDeg: number;
   onChangeFlexionDeg: (deg: number) => void;
   patellaSubluxation: number;
   onChangePatellaSubluxation: (val: number) => void;
-  kinematics: KneeKinematics;
-  showAllLabels: boolean;
-  onToggleAllLabels: () => void;
-  showSlicePlane: boolean;
-  onToggleSlicePlane: () => void;
-  mriSliceRas: [number, number, number];
-  mriPlane: MriPlaneMode;
-  theme: ThemeMode;
-  onExitFullScreenMode: () => void;
+  enabledStructures: ReadonlySet<StructureId>;
+  layerMode: LayerSelectMode;
+  onChangeLayerMode: (mode: LayerSelectMode) => void;
+  onToggleStructure: (id: StructureId) => void;
+  onToggleLayerGroup: (groupId: TissueGroup) => void;
+  onEnableAllStructures: () => void;
+  hideLabels: boolean;
+  onToggleHideLabels: () => void;
 }
 
-type CaptionMode = 'patient' | 'clinical' | 'off';
-
-export function FullScreen3DView({
-  landmarks,
+export function FullScreen3DOverlay({
+  hostElement,
   activePresetId,
   onSelectPreset,
   moduleId,
-  subStepId,
-  targetRasOverride,
-  targetBadge,
-  viewMode,
-  onChangeViewMode,
-  visibility,
-  onChangeVisibility,
-  cameraPreset,
-  cameraDistanceScale,
-  cameraTrigger,
-  onSelectCameraPreset,
-  activeStructure,
-  onSelectStructure,
   flexionDeg,
   onChangeFlexionDeg,
   patellaSubluxation,
   onChangePatellaSubluxation,
-  kinematics,
-  showAllLabels,
-  onToggleAllLabels,
-  showSlicePlane,
-  onToggleSlicePlane,
-  mriSliceRas,
-  mriPlane,
-  theme,
-  onExitFullScreenMode,
-}: FullScreen3DViewProps) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [selectorOpen, setSelectorOpen] = useState(true);
-  const [captionMode, setCaptionMode] = useState<CaptionMode>('patient');
-  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  enabledStructures,
+  layerMode,
+  onChangeLayerMode,
+  onToggleStructure,
+  onToggleLayerGroup,
+  onEnableAllStructures,
+  hideLabels,
+  onToggleHideLabels,
+}: FullScreen3DOverlayProps) {
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [isMonitorFullscreen, setIsMonitorFullscreen] = useState(false);
 
   const activePreset =
     PATIENT_DEMO_PRESETS.find((p) => p.id === activePresetId) ?? PATIENT_DEMO_PRESETS[0];
   const isPatella = moduleId === 'patellar-dislocation';
 
   const handleBrowserFullscreen = async () => {
-    const el = hostRef.current;
-    if (!el) return;
+    if (!hostElement) return;
     try {
       if (!document.fullscreenElement) {
-        await el.requestFullscreen();
-        setIsBrowserFullscreen(true);
+        await hostElement.requestFullscreen();
+        setIsMonitorFullscreen(true);
       } else {
         await document.exitFullscreen();
-        setIsBrowserFullscreen(false);
+        setIsMonitorFullscreen(false);
       }
     } catch {
-      // Clipboard/fullscreen fallback when blocked by headless iframe
+      // Safe fallback when blocked by browser security policy
     }
   };
 
   return (
-    <div className="fullscreen-3d-host" ref={hostRef}>
-      <KneeSpecimen3D
-        landmarks={landmarks}
-        moduleId={moduleId}
-        subStepId={subStepId}
-        targetRasOverride={targetRasOverride}
-        targetBadge={targetBadge}
-        viewMode={viewMode}
-        onChangeViewMode={onChangeViewMode}
-        visibility={visibility}
-        onChangeVisibility={onChangeVisibility}
-        cameraPreset={cameraPreset}
-        cameraDistanceScale={cameraDistanceScale}
-        cameraTrigger={cameraTrigger}
-        onSelectCameraPreset={onSelectCameraPreset}
-        activeStructure={activeStructure}
-        onSelectStructure={onSelectStructure}
-        flexionDeg={flexionDeg}
-        kinematics={kinematics}
-        showAllLabels={showAllLabels}
-        onToggleAllLabels={onToggleAllLabels}
-        showSlicePlane={showSlicePlane}
-        onToggleSlicePlane={onToggleSlicePlane}
-        mriSliceRas={mriSliceRas}
-        mriPlane={mriPlane}
-        theme={theme}
-        hideLabels={captionMode === 'off'}
-        isFullScreenPage
-        onToggleFullScreenPage={onExitFullScreenMode}
-      />
+    <div className="fs-selector-drawer">
+      <button
+        type="button"
+        className="fs-drawer-toggle"
+        onClick={() => setPanelOpen((v) => !v)}
+      >
+        <span>
+          3D View: <strong>{activePreset.label}</strong>
+        </span>
+        {panelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
 
-      {/* Collapsible Top-Left Floating Showcase Preset Selector */}
-      <div className={`fs-selector-drawer ${selectorOpen ? 'open' : 'collapsed'}`}>
-        <button
-          type="button"
-          className="fs-drawer-toggle"
-          onClick={() => setSelectorOpen((v) => !v)}
-        >
-          <span>Showcase Model: <strong>{activePreset.label}</strong></span>
-          {selectorOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
-
-        {selectorOpen && (
-          <div className="fs-drawer-body">
-            <div className="fs-group-label">Healthy &amp; Pathologies in 3D</div>
-            <div className="fs-preset-grid">
-              {PATIENT_DEMO_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`fs-preset-pill ${preset.id === activePreset.id ? 'active' : ''}`}
-                  onClick={() => onSelectPreset(preset)}
-                >
-                  {preset.label}
-                </button>
+      {panelOpen && (
+        <div className="fs-drawer-body">
+          <label className="fs-select-label">
+            <span>Model / Pathology</span>
+            <select
+              className="fs-select-input"
+              value={activePreset.id}
+              onChange={(e) => {
+                const found = PATIENT_DEMO_PRESETS.find((p) => p.id === e.target.value);
+                if (found) onSelectPreset(found);
+              }}
+            >
+              {PATIENT_DEMO_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
               ))}
-            </div>
-          </div>
-        )}
-      </div>
+            </select>
+          </label>
 
-      {/* Floating Bottom-Center Interactive Dock & Patient/Clinical Caption */}
-      <div className="fs-bottom-dock">
-        {captionMode !== 'off' && (
-          <div className="fs-caption-card">
-            <div className="fs-caption-title">{activePreset.patientTitle}</div>
-            <p className="fs-caption-text">
-              {captionMode === 'patient'
-                ? activePreset.patientSummary
-                : activePreset.clinicalSummary}
-            </p>
-          </div>
-        )}
+          <p className="fs-inline-summary">{activePreset.patientSummary}</p>
 
-        <div className="fs-controls-bar">
-          <label className="fs-motion-slider">
+          <label className="fs-motion-row">
             <span>{isPatella ? 'Patella Slip' : 'Knee Bend'}</span>
             <input
               type="range"
@@ -207,53 +130,106 @@ export function FullScreen3DView({
               }
               aria-label="3D knee motion control"
             />
-            <strong>{isPatella ? `${Math.round(patellaSubluxation * 100)}%` : `${flexionDeg}°`}</strong>
+            <strong>
+              {isPatella ? `${Math.round(patellaSubluxation * 100)}%` : `${flexionDeg}°`}
+            </strong>
           </label>
 
-          <div className="segmented-pill" role="group" aria-label="Caption mode">
+          <div className="fs-layers-toggle-bar">
             <button
               type="button"
-              className={`pill-btn ${captionMode === 'patient' ? 'active' : ''}`}
-              onClick={() => setCaptionMode('patient')}
+              className={`mini-chip ${layersOpen ? 'active' : ''}`}
+              onClick={() => setLayersOpen((v) => !v)}
             >
-              <UserCheck size={12} /> Patient
+              <Layers size={11} />
+              <span>Layers ({enabledStructures.size}/16)</span>
             </button>
+
+            <div className="segmented-pill mini-seg">
+              <button
+                type="button"
+                className={`pill-btn ${layerMode === 'multiple' ? 'active' : ''}`}
+                onClick={() => onChangeLayerMode('multiple')}
+              >
+                Multi
+              </button>
+              <button
+                type="button"
+                className={`pill-btn ${layerMode === 'single' ? 'active' : ''}`}
+                onClick={() => onChangeLayerMode('single')}
+              >
+                Single
+              </button>
+            </div>
+
             <button
               type="button"
-              className={`pill-btn ${captionMode === 'clinical' ? 'active' : ''}`}
-              onClick={() => setCaptionMode('clinical')}
+              className="reset-link-btn"
+              onClick={onEnableAllStructures}
+              title="Show all structures"
             >
-              <Sparkles size={12} /> Clinical
-            </button>
-            <button
-              type="button"
-              className={`pill-btn ${captionMode === 'off' ? 'active' : ''}`}
-              onClick={() => setCaptionMode('off')}
-            >
-              <EyeOff size={12} /> Pure 3D
+              <RotateCcw size={11} />
             </button>
           </div>
 
-          <button
-            type="button"
-            className="chip-btn"
-            onClick={handleBrowserFullscreen}
-            title="Expand monitor fullscreen"
-          >
-            {isBrowserFullscreen ? <Minimize size={13} /> : <Maximize size={13} />}
-            <span>{isBrowserFullscreen ? 'Window' : 'Monitor Full'}</span>
-          </button>
+          {layersOpen && (
+            <div className="fs-layers-scroll">
+              <div className="layer-chips-grid">
+                {LAYER_GROUPS.map((lg) => {
+                  const onCount = lg.structures.filter((sid) => enabledStructures.has(sid)).length;
+                  const active = onCount > 0;
+                  return (
+                    <button
+                      key={lg.id}
+                      type="button"
+                      className={`layer-chip-btn ${active ? 'active' : ''}`}
+                      onClick={() => onToggleLayerGroup(lg.id)}
+                    >
+                      <span className="layer-chip-dot" />
+                      <span>{lg.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          <button
-            type="button"
-            className="chip-btn primary-chip"
-            onClick={onExitFullScreenMode}
-          >
-            <Columns2 size={13} />
-            <span>3D + MRI</span>
-          </button>
+              <div className="fs-struct-switches">
+                {ANATOMY_SYSTEM_GROUPS.flatMap((g) => g.entries).map((entry) => {
+                  const on = enabledStructures.has(entry.structureId);
+                  return (
+                    <div key={entry.structureId} className="outliner-item-row compact">
+                      <span className="outliner-label-btn static">{entry.label}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={on}
+                        className={`anat-switch ${on ? 'on' : ''}`}
+                        onClick={() => onToggleStructure(entry.structureId)}
+                      >
+                        <span className="anat-switch-thumb" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="fs-panel-actions">
+            <button
+              type="button"
+              className={`mini-chip ${hideLabels ? 'active' : ''}`}
+              onClick={onToggleHideLabels}
+            >
+              <EyeOff size={11} />
+              <span>{hideLabels ? 'Show Pins' : 'Hide Pins'}</span>
+            </button>
+            <button type="button" className="mini-chip" onClick={handleBrowserFullscreen}>
+              {isMonitorFullscreen ? <Minimize size={11} /> : <Maximize size={11} />}
+              <span>Full Monitor</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

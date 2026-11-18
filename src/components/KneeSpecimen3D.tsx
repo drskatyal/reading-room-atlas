@@ -1,24 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
-  Eye,
-  Layers,
+  Compass,
   Maximize2,
   Minimize2,
   Minus,
   Plus,
   RotateCcw,
+  Scan,
 } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import {
   createAnatomyTextureBank,
   createStudioVignetteTexture,
@@ -54,7 +49,8 @@ interface KneeSpecimen3DProps {
   viewMode: SpecimenViewMode;
   onChangeViewMode: (mode: SpecimenViewMode) => void;
   visibility: TissueVisibility;
-  onChangeVisibility: (next: TissueVisibility) => void;
+  enabledStructures?: ReadonlySet<StructureId>;
+  paused?: boolean;
   cameraPreset: CameraPresetKey;
   cameraDistanceScale?: number;
   cameraTrigger: number;
@@ -141,9 +137,9 @@ const ALL_PIN_STRUCTURES: StructureId[] = [
 
 const VIEW_MODES: Array<{ id: SpecimenViewMode; label: string }> = [
   { id: 'solid', label: 'Solid' },
-  { id: 'joint-interior', label: 'Inside (X-Ray)' },
-  { id: 'plateau-topdown', label: 'Plateau' },
-  { id: 'cartilage-map', label: 'Cartilage' },
+  { id: 'joint-interior', label: 'X-Ray Bone' },
+  { id: 'plateau-topdown', label: 'Plateau Top' },
+  { id: 'cartilage-map', label: 'Cartilage mm' },
 ];
 
 function isStructureId(val: string): val is StructureId {
@@ -183,7 +179,8 @@ export function KneeSpecimen3D({
   viewMode,
   onChangeViewMode,
   visibility,
-  onChangeVisibility,
+  enabledStructures,
+  paused = false,
   cameraPreset,
   cameraDistanceScale = 1.0,
   cameraTrigger,
@@ -211,19 +208,24 @@ export function KneeSpecimen3D({
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modelReady, setModelReady] = useState(false);
-  const [hoveredStructure, setHoveredStructure] = useState<StructureId | null>(null);
-  const [stageSize, setStageSize] = useState({ w: 480, h: 480 });
 
-  const [focusedPin, setFocusedPin] = useState<{ x: number; y: number; visible: boolean }>({
-    x: 0,
-    y: 0,
-    visible: false,
-  });
-  const [allPins, setAllPins] = useState<
-    Record<string, { x: number; y: number; visible: boolean }>
-  >({});
+  const focusedLabel = useMemo(() => {
+    if (targetBadge) return targetBadge;
+    return STRUCTURES_INFO[activeStructure]?.shortLabel ?? activeStructure;
+  }, [targetBadge, activeStructure]);
 
-  // Latest props ref for rAF loop
+  const focusedLabelRef = useRef(focusedLabel);
+  focusedLabelRef.current = focusedLabel;
+
+  const hoveredStructureRef = useRef<StructureId | null>(null);
+  const calloutLayerRef = useRef<HTMLDivElement | null>(null);
+  const calloutLineRef = useRef<SVGLineElement | null>(null);
+  const calloutDotRef = useRef<SVGCircleElement | null>(null);
+  const calloutBadgeRef = useRef<HTMLDivElement | null>(null);
+  const allPinsLayerRef = useRef<HTMLDivElement | null>(null);
+  const pinButtonsRef = useRef<Map<StructureId, HTMLButtonElement>>(new Map());
+
+  // Latest props ref for rAF loop (zero React re-renders during drag/orbit)
   const stateRef = useRef({
     moduleId,
     subStepId,
@@ -231,8 +233,9 @@ export function KneeSpecimen3D({
     targetRasOverride,
     viewMode,
     visibility,
+    enabledStructures,
+    paused,
     activeStructure,
-    hoveredStructure,
     kinematics,
     showAllLabels,
     showSlicePlane,
@@ -248,8 +251,9 @@ export function KneeSpecimen3D({
     targetRasOverride,
     viewMode,
     visibility,
+    enabledStructures,
+    paused,
     activeStructure,
-    hoveredStructure,
     kinematics,
     showAllLabels,
     showSlicePlane,
@@ -266,7 +270,6 @@ export function KneeSpecimen3D({
     camera: THREE.PerspectiveCamera;
     controls: OrbitControls;
     renderer: THREE.WebGLRenderer;
-    composer: EffectComposer;
     meshes: Map<string, THREE.Mesh>;
     materials: Map<string, THREE.MeshPhysicalMaterial>;
     xrayUniform: { uXrayMode: { value: number } };
@@ -284,6 +287,9 @@ export function KneeSpecimen3D({
     vignetteMat: THREE.MeshBasicMaterial;
     animTargetPos: THREE.Vector3 | null;
     animTargetLook: THREE.Vector3 | null;
+    syncSize: () => void;
+    wake: (frames?: number) => void;
+    dirtyShadow: () => void;
     tibiaPivotVec: THREE.Vector3;
     tibiaPivotAxis: THREE.Vector3;
     patellaCenterVec: THREE.Vector3;
@@ -308,7 +314,6 @@ export function KneeSpecimen3D({
 
     const width = Math.max(container.clientWidth, 320);
     const height = Math.max(container.clientHeight, 320);
-    setStageSize({ w: width, h: height });
 
     const scene = new THREE.Scene();
 
@@ -320,21 +325,24 @@ export function KneeSpecimen3D({
       powerPreference: 'high-performance',
       alpha: false,
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setSize(width, height, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.06;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
     renderer.domElement.className = 'specimen-canvas';
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.085;
+    controls.dampingFactor = 0.16;
+    controls.rotateSpeed = 0.95;
     controls.zoomToCursor = true;
     controls.zoomSpeed = 1.3;
-    controls.panSpeed = 0.9;
+    controls.panSpeed = 0.95;
     controls.minDistance = 1.2;
     controls.maxDistance = 18.0;
     controls.target.set(0.0, 0.18, 0.15);
@@ -427,34 +435,29 @@ export function KneeSpecimen3D({
     const sliceOutline = new THREE.LineLoop(sliceOutlineGeo, sliceOutlineMat);
     slicePlaneMesh.add(sliceOutline);
 
-    // Effect Composer: Render -> GTAO -> Output -> SMAA
-    const composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, camera);
-    composer.addPass(renderPass);
-
-    const gtaoPass = new GTAOPass(scene, camera, width, height);
-    gtaoPass.output = GTAOPass.OUTPUT.Default;
-    gtaoPass.updateGtaoMaterial({ radius: 0.24, distanceExponent: 1.8, thickness: 1.0, scale: 1.0, samples: 12 });
-    composer.addPass(gtaoPass);
-
-    const outputPass = new OutputPass();
-    composer.addPass(outputPass);
-
-    const smaaPass = new SMAAPass();
-    composer.addPass(smaaPass);
-
-    // Load 3T In-Vivo Specimen GLB
+    // Load 3T In-Vivo Specimen GLB (single-pass hardware MSAA for 60fps OrbitControls)
     const textureBank = createAnatomyTextureBank();
     const xrayUniform = { uXrayMode: { value: 0.0 } };
     const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
     const meshes = new Map<string, THREE.Mesh>();
     const materials = new Map<string, THREE.MeshPhysicalMaterial>();
 
+    let activeFrames = 60;
+    const wake = (frames = 45) => {
+      activeFrames = Math.max(activeFrames, frames);
+    };
+    const dirtyShadow = () => {
+      renderer.shadowMap.needsUpdate = true;
+      wake(30);
+    };
+
+    controls.addEventListener('start', () => wake(45));
+    controls.addEventListener('change', () => wake(35));
+
     const refs = {
       camera,
       controls,
       renderer,
-      composer,
       meshes,
       materials,
       xrayUniform,
@@ -472,6 +475,9 @@ export function KneeSpecimen3D({
       vignetteMat,
       animTargetPos: null as THREE.Vector3 | null,
       animTargetLook: null as THREE.Vector3 | null,
+      syncSize: () => {},
+      wake,
+      dirtyShadow,
       tibiaPivotVec: new THREE.Vector3(0, 0.2, 0.1),
       tibiaPivotAxis: new THREE.Vector3(1, 0, 0),
       patellaCenterVec: new THREE.Vector3(-0.44, 1.47, 1.97),
@@ -504,6 +510,7 @@ export function KneeSpecimen3D({
         gltf.scene.traverse((obj) => {
           if (obj instanceof THREE.Mesh) {
             obj.geometry.computeVertexNormals();
+            obj.geometry.computeBoundingBox();
             collected.push({ name: obj.name, mesh: obj });
           }
         });
@@ -562,6 +569,8 @@ export function KneeSpecimen3D({
 
         setModelReady(true);
         setLoadProgress(100);
+        dirtyShadow();
+        wake(60);
       },
       (evt) => {
         if (evt.total > 0) {
@@ -579,6 +588,7 @@ export function KneeSpecimen3D({
     const raycaster = new THREE.Raycaster();
     const pointerNdc = new THREE.Vector2();
     let pointerDownPos: { x: number; y: number } | null = null;
+    let lastHoverCheckMs = 0;
 
     const pickStructureAt = (clientX: number, clientY: number): { id: StructureId; point: THREE.Vector3 } | null => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -602,9 +612,27 @@ export function KneeSpecimen3D({
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      // Zero raycasting while dragging/orbiting for locked 60fps pointer latency
+      if (e.buttons !== 0) {
+        renderer.domElement.style.cursor = 'grabbing';
+        if (hoveredStructureRef.current !== null) {
+          hoveredStructureRef.current = null;
+        }
+        wake(35);
+        return;
+      }
+
+      const now = performance.now();
+      if (now - lastHoverCheckMs < 75) return;
+      lastHoverCheckMs = now;
+
       const hit = pickStructureAt(e.clientX, e.clientY);
-      setHoveredStructure(hit ? hit.id : null);
-      renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
+      const nextId = hit ? hit.id : null;
+      if (hoveredStructureRef.current !== nextId) {
+        hoveredStructureRef.current = nextId;
+        wake(6);
+      }
+      renderer.domElement.style.cursor = nextId ? 'pointer' : 'grab';
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -612,9 +640,13 @@ export function KneeSpecimen3D({
       refs.animTargetPos = null;
       refs.animTargetLook = null;
       pointerDownPos = { x: e.clientX, y: e.clientY };
+      renderer.domElement.style.cursor = 'grabbing';
+      wake(40);
     };
 
     const onPointerUp = (e: PointerEvent) => {
+      renderer.domElement.style.cursor = 'grab';
+      wake(35);
       if (!pointerDownPos) return;
       const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
       pointerDownPos = null;
@@ -630,6 +662,8 @@ export function KneeSpecimen3D({
       }
     };
 
+    const onWheel = () => wake(35);
+
     const onDoubleClick = (e: MouseEvent) => {
       const hit = pickStructureAt(e.clientX, e.clientY);
       if (hit) {
@@ -644,11 +678,13 @@ export function KneeSpecimen3D({
         refs.animTargetPos = new THREE.Vector3(...preset.pos);
         refs.animTargetLook = new THREE.Vector3(...preset.target);
       }
+      wake(50);
     };
 
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
     renderer.domElement.addEventListener('dblclick', onDoubleClick);
 
     const tmpWorldPos = new THREE.Vector3();
@@ -660,10 +696,29 @@ export function KneeSpecimen3D({
       const s = stateRef.current;
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      if (cw > 0 && ch > 0 && !s.hideLabels && refs.meshes.size > 0) {
+      const layerEl = calloutLayerRef.current;
+      const lineEl = calloutLineRef.current;
+      const dotEl = calloutDotRef.current;
+      const badgeEl = calloutBadgeRef.current;
+      const allLayerEl = allPinsLayerRef.current;
+
+      if (cw <= 0 || ch <= 0 || s.hideLabels || refs.meshes.size === 0) {
+        if (layerEl) layerEl.style.display = 'none';
+        if (allLayerEl) allLayerEl.style.display = 'none';
+        return;
+      }
+
+      if (!s.showAllLabels && layerEl && lineEl && dotEl && badgeEl) {
+        if (allLayerEl) allLayerEl.style.display = 'none';
+
         const focusStruct = s.activeStructure;
         let anchorParent: THREE.Group = femurGroup;
-        if (focusStruct === 'Patella' || focusStruct === 'PatellarCartilage' || focusStruct === 'PatellarTendon' || focusStruct === 'QuadricepsTendon') {
+        if (
+          focusStruct === 'Patella' ||
+          focusStruct === 'PatellarCartilage' ||
+          focusStruct === 'PatellarTendon' ||
+          focusStruct === 'QuadricepsTendon'
+        ) {
           anchorParent = patellaGroup;
         } else if (focusStruct === 'MedialMeniscus') {
           anchorParent = medialMeniscusGroup;
@@ -698,7 +753,9 @@ export function KneeSpecimen3D({
               ? refs.meshes.get('BucketHandleFragment') ?? refs.meshes.get('MedialMeniscus')
               : refs.meshes.get(focusStruct);
           if (targetMesh) {
-            targetMesh.geometry.computeBoundingBox();
+            if (!targetMesh.geometry.boundingBox) {
+              targetMesh.geometry.computeBoundingBox();
+            }
             if (targetMesh.geometry.boundingBox) {
               targetMesh.geometry.boundingBox.getCenter(tmpCenter);
               if (focusStruct === 'ACL') {
@@ -713,68 +770,93 @@ export function KneeSpecimen3D({
         tmpProj.copy(tmpWorldPos).project(camera);
         const px = (tmpProj.x * 0.5 + 0.5) * cw;
         const py = (-tmpProj.y * 0.5 + 0.5) * ch;
-        const onScreen = tmpProj.z >= -1 && tmpProj.z <= 1 && px > 12 && px < cw - 12 && py > 54 && py < ch - 52;
-        setFocusedPin((prev) => {
-          if (
-            prev.visible === onScreen &&
-            Math.abs(prev.x - px) < 0.7 &&
-            Math.abs(prev.y - py) < 0.7
-          ) {
-            return prev;
-          }
-          return { x: px, y: py, visible: onScreen };
-        });
+        const onScreen =
+          tmpProj.z >= -1 && tmpProj.z <= 1 && px > 12 && px < cw - 12 && py > 54 && py < ch - 52;
 
-        if (s.showAllLabels) {
-          const nextAll: Record<string, { x: number; y: number; visible: boolean }> = {};
-          for (const sid of ALL_PIN_STRUCTURES) {
-            const m = refs.meshes.get(sid);
-            if (!m || !m.visible) {
-              nextAll[sid] = { x: 0, y: 0, visible: false };
-              continue;
-            }
-            tmpBox.setFromObject(m);
-            tmpBox.getCenter(tmpWorldPos);
-            tmpProj.copy(tmpWorldPos).project(camera);
-            const sx = (tmpProj.x * 0.5 + 0.5) * cw;
-            const sy = (-tmpProj.y * 0.5 + 0.5) * ch;
-            const vis = tmpProj.z >= -1 && tmpProj.z <= 1 && sx > 20 && sx < cw - 20 && sy > 58 && sy < ch - 56;
-            nextAll[sid] = { x: sx, y: sy, visible: vis };
-          }
-          setAllPins(nextAll);
+        if (!onScreen) {
+          layerEl.style.display = 'none';
+        } else {
+          layerEl.style.display = 'block';
+          const lblText = focusedLabelRef.current;
+          const estW = Math.max(96, lblText.length * 7.3 + 24);
+          const placeLeft = px > cw * 0.56;
+          const badgeX = placeLeft
+            ? Math.max(10, Math.min(px - estW - 20, cw - estW - 12))
+            : Math.max(10, Math.min(px + 24, cw - estW - 12));
+          const badgeY = Math.max(py - 36, 12);
+          const lineEndX = placeLeft ? badgeX + estW - 6 : badgeX + 8;
+
+          lineEl.setAttribute('x1', px.toFixed(1));
+          lineEl.setAttribute('y1', py.toFixed(1));
+          lineEl.setAttribute('x2', lineEndX.toFixed(1));
+          lineEl.setAttribute('y2', (badgeY + 11).toFixed(1));
+          dotEl.setAttribute('cx', px.toFixed(1));
+          dotEl.setAttribute('cy', py.toFixed(1));
+          badgeEl.style.transform = `translate3d(${badgeX.toFixed(1)}px, ${badgeY.toFixed(1)}px, 0)`;
         }
       } else {
-        setFocusedPin((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+        if (layerEl) layerEl.style.display = 'none';
+      }
+
+      if (s.showAllLabels && allLayerEl) {
+        allLayerEl.style.display = 'block';
+        for (const sid of ALL_PIN_STRUCTURES) {
+          const btn = pinButtonsRef.current.get(sid);
+          if (!btn) continue;
+          const m = refs.meshes.get(sid);
+          if (!m || !m.visible) {
+            btn.style.display = 'none';
+            continue;
+          }
+          tmpBox.setFromObject(m);
+          tmpBox.getCenter(tmpWorldPos);
+          tmpProj.copy(tmpWorldPos).project(camera);
+          const sx = (tmpProj.x * 0.5 + 0.5) * cw;
+          const sy = (-tmpProj.y * 0.5 + 0.5) * ch;
+          const vis =
+            tmpProj.z >= -1 && tmpProj.z <= 1 && sx > 20 && sx < cw - 20 && sy > 58 && sy < ch - 56;
+          if (!vis) {
+            btn.style.display = 'none';
+          } else {
+            btn.style.display = 'inline-block';
+            btn.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
+          }
+        }
       }
     };
 
     // ResizeObserver with synchronous re-render so frames never drop during resize
     const syncViewportSize = () => {
-      const w = Math.max(container.clientWidth, 100);
-      const h = Math.max(container.clientHeight, 100);
-      setStageSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+      if (container.clientWidth < 40 || container.clientHeight < 40) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
-      composer.setSize(w, h);
-      gtaoPass.setSize(w, h);
       controls.update();
-      composer.render();
+      renderer.render(scene, camera);
       projectCalloutPins();
+      wake(15);
     };
+    refs.syncSize = syncViewportSize;
     const ro = new ResizeObserver(syncViewportSize);
     ro.observe(container);
 
-    // Animation Loop
+    // Animation Loop with smart idle sleep + zero-lag OrbitControls wake
     const clock = new THREE.Clock();
     let frameHandle = 0;
 
     const animate = () => {
       if (disposed) return;
       frameHandle = window.requestAnimationFrame(animate);
+      const s = stateRef.current;
+      if (s.paused) return;
+
       const dt = Math.min(clock.getDelta(), 0.5);
       const elapsedSec = clock.elapsedTime;
-      const s = stateRef.current;
+      const animatingCamera = Boolean(refs.animTargetPos && refs.animTargetLook);
+      if (activeFrames <= 0 && !animatingCamera) return;
+      activeFrames = Math.max(0, activeFrames - 1);
 
       // 1. Update smooth frame-rate-independent camera fly-to animation
       if (refs.animTargetPos && refs.animTargetLook) {
@@ -826,9 +908,10 @@ export function KneeSpecimen3D({
         materials: refs.materials,
         xrayUniform: refs.xrayUniform,
         visibility: effVis,
+        enabledStructures: s.enabledStructures,
         chapterId: s.moduleId,
         activeStructure: s.activeStructure,
-        hoveredStructure: s.hoveredStructure,
+        hoveredStructure: hoveredStructureRef.current,
       });
 
       if (refs.pathologySystem) {
@@ -864,10 +947,10 @@ export function KneeSpecimen3D({
         slicePlaneMesh.visible = false;
       }
 
-      // 5. Render Scene
-      composer.render();
+      // 5. Render Scene (single-pass hardware MSAA)
+      renderer.render(scene, camera);
 
-      // 6. Project Active Target Callout Pin & Optional All-Pins Overlay
+      // 6. Direct DOM Projection of Active Target Callout Pin & Optional All-Pins Overlay
       projectCalloutPins();
     };
 
@@ -880,6 +963,7 @@ export function KneeSpecimen3D({
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('wheel', onWheel);
       renderer.domElement.removeEventListener('dblclick', onDoubleClick);
 
       refs.pathologySystem?.dispose();
@@ -894,7 +978,6 @@ export function KneeSpecimen3D({
       textureBank.dispose();
       envTarget.dispose();
       controls.dispose();
-      composer.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
@@ -911,7 +994,30 @@ export function KneeSpecimen3D({
     refs.vignetteMat.map = createStudioVignetteTexture(theme);
     refs.vignetteMat.needsUpdate = true;
     oldTex?.dispose();
+    refs.wake(12);
   }, [theme]);
+
+  // Wake rAF loop whenever clinical props, visibility, or kinematics change
+  useEffect(() => {
+    sceneRefs.current?.wake(18);
+  }, [
+    viewMode,
+    visibility,
+    subStepId,
+    meniscalTearMorphology,
+    targetRasOverride,
+    targetBadge,
+    showAllLabels,
+    showSlicePlane,
+    mriSliceRas,
+    mriPlane,
+    hideLabels,
+  ]);
+
+  // Mark shadow map dirty when mesh visibility or joint pose changes
+  useEffect(() => {
+    sceneRefs.current?.dirtyShadow();
+  }, [flexionDeg, kinematics.patellaLateralShiftX, moduleId, enabledStructures]);
 
   // Keep tibial flexion pivot synced even if landmarks finish fetching after GLB load
   useEffect(() => {
@@ -924,6 +1030,7 @@ export function KneeSpecimen3D({
     if (refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
     refs.tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
     refs.tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
+    refs.dirtyShadow();
   }, [landmarks, modelReady]);
 
   // Fly camera when preset, focus, or cameraTrigger changes
@@ -939,6 +1046,7 @@ export function KneeSpecimen3D({
     );
     refs.animTargetLook = framed.target;
     refs.animTargetPos = framed.pos;
+    refs.wake(50);
   }, [cameraPreset, cameraDistanceScale, cameraTrigger, moduleId, activeStructure, modelReady]);
 
   const handleZoomStep = (factor: number) => {
@@ -955,6 +1063,7 @@ export function KneeSpecimen3D({
     offset.setLength(nextDist);
     refs.animTargetLook = target;
     refs.animTargetPos = target.clone().add(offset);
+    refs.wake(45);
   };
 
   const handleResetView = () => {
@@ -969,16 +1078,17 @@ export function KneeSpecimen3D({
     );
     refs.animTargetLook = framed.target;
     refs.animTargetPos = framed.pos;
+    refs.wake(45);
   };
 
-  const focusedLabel = useMemo(() => {
-    if (targetBadge) return targetBadge;
-    return STRUCTURES_INFO[activeStructure]?.shortLabel ?? activeStructure;
-  }, [targetBadge, activeStructure]);
-
-  const toggleLayer = (key: keyof TissueVisibility) => {
-    onChangeVisibility({ ...visibility, [key]: !visibility[key] });
-  };
+  // Sync canvas dimensions cleanly when persistent WebGL pane unhides or toggles full-screen
+  useEffect(() => {
+    if (paused) return;
+    const id = window.requestAnimationFrame(() => {
+      sceneRefs.current?.syncSize();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [paused, isFullScreenPage]);
 
   return (
     <section className="stage-pane" aria-label="Interactive 3D knee specimen">
@@ -990,20 +1100,17 @@ export function KneeSpecimen3D({
         </div>
 
         <div className="pane-actions">
-          <div className="segmented-pill" role="tablist" aria-label="3D view mode">
-            {VIEW_MODES.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                role="tab"
-                aria-selected={viewMode === m.id}
-                className={`pill-btn ${viewMode === m.id ? 'active' : ''}`}
-                onClick={() => onChangeViewMode(m.id)}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className={`chip-btn ${viewMode === 'joint-interior' ? 'active' : ''}`}
+            onClick={() =>
+              onChangeViewMode(viewMode === 'joint-interior' ? 'solid' : 'joint-interior')
+            }
+            title="Toggle translucent X-ray bone mode"
+          >
+            <Scan size={13} />
+            <span>X-Ray</span>
+          </button>
 
           <div className="popover-anchor" ref={layersRef}>
             <button
@@ -1012,13 +1119,32 @@ export function KneeSpecimen3D({
               onClick={() => setLayersMenuOpen((v) => !v)}
               aria-expanded={layersMenuOpen}
             >
-              <Layers size={13} />
-              <span>Layers</span>
+              <Compass size={13} />
+              <span>View</span>
               <ChevronDown size={12} />
             </button>
 
             {layersMenuOpen && (
-              <div className="popover-panel" role="dialog" aria-label="3D layers and camera angles">
+              <div className="popover-panel" role="dialog" aria-label="3D display style, camera and helpers">
+                <div className="popover-section">
+                  <div className="popover-heading">3D Display Style</div>
+                  <div className="camera-grid two-col">
+                    {VIEW_MODES.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        className={`mini-chip ${viewMode === m.id ? 'active' : ''}`}
+                        onClick={() => {
+                          onChangeViewMode(m.id);
+                          setLayersMenuOpen(false);
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="popover-section">
                   <div className="popover-heading">Camera Viewpoint</div>
                   <div className="camera-grid">
@@ -1039,36 +1165,11 @@ export function KneeSpecimen3D({
                 </div>
 
                 <div className="popover-section">
-                  <div className="popover-heading">Tissue Visibility</div>
-                  <div className="layer-checks">
-                    {(
-                      [
-                        ['bones', 'Femur, Tibia & Fibula'],
-                        ['extensor', 'Patella & Extensor Tendons'],
-                        ['cartilage', 'Hyaline Cartilage'],
-                        ['menisci', 'Medial & Lateral Menisci'],
-                        ['cruciates', 'Cruciates (ACL / PCL)'],
-                        ['collaterals', 'Collaterals (MCL / LCL)'],
-                      ] as Array<[keyof TissueVisibility, string]>
-                    ).map(([k, lbl]) => (
-                      <label key={k} className="check-row">
-                        <input
-                          type="checkbox"
-                          checked={visibility[k]}
-                          onChange={() => toggleLayer(k)}
-                        />
-                        <span>{lbl}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="popover-section">
-                  <div className="popover-heading">Overlay Helpers</div>
+                  <div className="popover-heading">3D Helpers</div>
                   <div className="layer-checks">
                     <label className="check-row">
                       <input type="checkbox" checked={showAllLabels} onChange={onToggleAllLabels} />
-                      <span>All 8 Anatomy Labels (L)</span>
+                      <span>All Anatomy Pins (L)</span>
                     </label>
                     <label className="check-row">
                       <input
@@ -1111,110 +1212,82 @@ export function KneeSpecimen3D({
           </div>
         )}
 
-        {/* Single Focused Callout Pin OR All 8 Pins */}
-        {modelReady && !hideLabels && !showAllLabels && focusedPin.visible && (() => {
-          const cw = stageSize.w || stageRef.current?.clientWidth || 480;
-          const estW = Math.max(96, focusedLabel.length * 7.3 + 24);
-          const placeLeft = focusedPin.x > cw * 0.56;
-          const badgeX = placeLeft
-            ? Math.max(10, Math.min(focusedPin.x - estW - 20, cw - estW - 12))
-            : Math.max(10, Math.min(focusedPin.x + 24, cw - estW - 12));
-          const badgeY = Math.max(focusedPin.y - 36, 12);
-          const lineEndX = placeLeft ? badgeX + estW - 6 : badgeX + 8;
-          return (
+        {/* Single Focused Callout Pin OR All 8 Pins (Direct DOM Refs — zero per-frame React renders) */}
+        {modelReady && !hideLabels && (
+          <>
             <div
+              ref={calloutLayerRef}
               className="callout-layer"
               aria-hidden="true"
-              style={{ pointerEvents: 'none' }}
+              style={{ pointerEvents: 'none', display: 'none' }}
             >
               <svg className="callout-svg">
                 <line
-                  x1={focusedPin.x}
-                  y1={focusedPin.y}
-                  x2={lineEndX}
-                  y2={badgeY + 11}
+                  ref={calloutLineRef}
+                  x1={0}
+                  y1={0}
+                  x2={0}
+                  y2={0}
                   stroke="rgba(125, 211, 252, 0.85)"
                   strokeWidth="1.5"
                 />
                 <circle
-                  cx={focusedPin.x}
-                  cy={focusedPin.y}
+                  ref={calloutDotRef}
+                  cx={0}
+                  cy={0}
                   r="4.5"
                   fill="#38bdf8"
                   stroke="#0f172a"
                   strokeWidth="1.5"
                 />
               </svg>
-              <div
-                className="focused-callout-badge"
-                style={{
-                  left: `${badgeX}px`,
-                  top: `${badgeY}px`,
-                }}
-              >
+              <div ref={calloutBadgeRef} className="focused-callout-badge">
                 {focusedLabel}
               </div>
             </div>
-          );
-        })()}
 
-        {modelReady && !hideLabels && showAllLabels && (
-          <div className="callout-layer" aria-hidden="false">
-            {ALL_PIN_STRUCTURES.map((sid) => {
-              const p = allPins[sid];
-              if (!p || !p.visible) return null;
-              const info = STRUCTURES_INFO[sid];
-              const active = sid === activeStructure;
-              return (
-                <button
-                  key={sid}
-                  type="button"
-                  className={`pin-pill ${active ? 'active' : ''}`}
-                  style={{ left: `${p.x}px`, top: `${p.y}px` }}
-                  onClick={() => onSelectStructure(sid)}
-                >
-                  {info.shortLabel}
-                </button>
-              );
-            })}
-          </div>
+            <div
+              ref={allPinsLayerRef}
+              className="callout-layer"
+              aria-hidden={!showAllLabels}
+              style={{ display: showAllLabels ? 'block' : 'none' }}
+            >
+              {ALL_PIN_STRUCTURES.map((sid) => {
+                const info = STRUCTURES_INFO[sid];
+                const active = sid === activeStructure;
+                return (
+                  <button
+                    key={sid}
+                    ref={(el) => {
+                      if (el) pinButtonsRef.current.set(sid, el);
+                      else pinButtonsRef.current.delete(sid);
+                    }}
+                    type="button"
+                    className={`pin-pill ${active ? 'active' : ''}`}
+                    style={{ left: 0, top: 0, display: 'none' }}
+                    onClick={() => onSelectStructure(sid)}
+                  >
+                    {info.shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
 
-        {/* Bottom-Left Subtle Kinematics Readout + Cartilage Colorbar when in Cartilage Map */}
-        <div className="stage-hud-left">
-          {viewMode === 'cartilage-map' && (
+        {/* Chondral mm Colorbar only when in Cartilage Map mode */}
+        {viewMode === 'cartilage-map' && (
+          <div className="stage-hud-left">
             <div className="chondral-scale-card">
               <span className="scale-lbl">0.0 mm</span>
               <div className="scale-gradient" />
               <span className="scale-lbl">3.8 mm</span>
             </div>
-          )}
-          <div className="telemetry-chip">
-            <span>{Math.round(flexionDeg)}° Flex</span>
-            <span>·</span>
-            <span>Drawer {kinematics.anteriorDrawerMm >= 0 ? `+${kinematics.anteriorDrawerMm}` : kinematics.anteriorDrawerMm} mm</span>
-            {moduleId === 'posterior-root' && (
-              <>
-                <span>·</span>
-                <span className="text-alert">Extrusion +{kinematics.meniscalExtrusionMm} mm</span>
-              </>
-            )}
           </div>
-        </div>
+        )}
 
-        {/* Bottom-Right Zoom & Reset Pill + Quick Eye Mode Hint */}
+        {/* Minimal Bottom-Right Zoom & Reset Pill */}
         <div className="stage-hud-right">
-          {viewMode !== 'solid' && (
-            <button
-              type="button"
-              className="quick-ghost-pill"
-              onClick={() => onChangeViewMode('solid')}
-              title="Restore solid bones"
-            >
-              <Eye size={12} />
-              <span>Solid Bone</span>
-            </button>
-          )}
           <div className="zoom-pill" role="group" aria-label="3D zoom controls">
             <button
               type="button"

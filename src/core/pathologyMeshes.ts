@@ -406,6 +406,15 @@ export function createPathologyOverlaySystem(
       matLesionCrimson.emissiveIntensity = pulse;
       matChondralRing.emissiveIntensity = pulse;
 
+      const femurVis = ctx.meshes.get('Femur')?.visible ?? visibility.bones;
+      const tibiaVis = ctx.meshes.get('Tibia')?.visible ?? visibility.bones;
+      const patellaVis = ctx.meshes.get('Patella')?.visible ?? visibility.extensor;
+      const medMenVis =
+        (ctx.meshes.get('MedialMeniscus')?.visible ?? false) ||
+        (ctx.meshes.get('MedialMeniscusTruncated')?.visible ?? false);
+      const femCartVis = ctx.meshes.get('FemoralCartilage')?.visible ?? visibility.cartilage;
+      const mpflVis = patellaVis || (ctx.meshes.get('MCL')?.visible ?? visibility.collaterals);
+
       // Reset visibility
       longMesh.visible = false;
       radialMesh.visible = false;
@@ -424,41 +433,40 @@ export function createPathologyOverlaySystem(
       femoralTrochleaBruise.visible = false;
       chondralMarker.visible = false;
 
-      if (moduleId === 'meniscal-tears-3d' && visibility.menisci) {
+      if (moduleId === 'meniscal-tears-3d' && medMenVis) {
         longMesh.visible = meniscalTearMorphology === 'longitudinal' || !meniscalTearMorphology;
         radialMesh.visible = meniscalTearMorphology === 'radial';
         horizGroup.visible = meniscalTearMorphology === 'horizontal';
       }
 
-      if (moduleId === 'posterior-root' && visibility.menisci) {
+      if (moduleId === 'posterior-root' && medMenVis) {
         rootGroup.visible = true;
       }
 
       if (moduleId === 'acl-rupture') {
         const showBruise = subStepId === 'acl-bruises' || subStepId === 'acl-tear-gap';
-        aclBruiseFemur.visible = visibility.bones && showBruise;
-        aclTibiaOverlays.visible = visibility.bones && showBruise;
+        aclBruiseFemur.visible = femurVis && showBruise;
+        aclTibiaOverlays.visible = tibiaVis && showBruise;
       }
 
       if (moduleId === 'pcl-dashboard') {
         pclDashboardBruise.visible =
-          visibility.bones && (subStepId === 'pcl-sag' || subStepId === 'pcl-midsubstance');
+          tibiaVis && (subStepId === 'pcl-sag' || subStepId === 'pcl-midsubstance');
       }
 
       if (moduleId === 'unhappy-triad') {
-        triadFemurBruise.visible = visibility.bones;
-        triadTibiaBruise.visible = visibility.bones;
-        rampMesh.visible = visibility.menisci && subStepId === 'triad-meniscus';
+        triadFemurBruise.visible = femurVis;
+        triadTibiaBruise.visible = tibiaVis;
+        rampMesh.visible = medMenVis && subStepId === 'triad-meniscus';
       }
 
       if (moduleId === 'patellar-dislocation') {
-        const showMpfl = visibility.extensor || visibility.collaterals;
-        mpflStumpFemur.visible = showMpfl;
-        mpflStumpPatella.visible = showMpfl;
-        mpflGapCore.visible = showMpfl;
+        mpflStumpFemur.visible = mpflVis;
+        mpflStumpPatella.visible = mpflVis;
+        mpflGapCore.visible = mpflVis;
 
-        patellarMedialBruise.visible = visibility.extensor;
-        femoralTrochleaBruise.visible = visibility.bones;
+        patellarMedialBruise.visible = patellaVis;
+        femoralTrochleaBruise.visible = femurVis;
 
         const worldPatStart = new THREE.Vector3(
           mpflPatellaStart.x + kinematics.patellaLateralShiftX,
@@ -472,7 +480,7 @@ export function createPathologyOverlaySystem(
         mpflGapCore.rotation.y = elapsedSec * 1.1;
       }
 
-      if (moduleId === 'chondral-oa' && visibility.cartilage && subStepId !== 'oa-map') {
+      if (moduleId === 'chondral-oa' && femCartVis && subStepId !== 'oa-map') {
         chondralMarker.visible = true;
       }
     },

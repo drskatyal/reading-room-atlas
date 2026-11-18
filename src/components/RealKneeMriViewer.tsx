@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   Crosshair,
-  Hand,
   Maximize2,
   Minus,
-  Palette,
   Plus,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -45,6 +43,7 @@ interface RealKneeMriViewerProps {
   quizCandidateStructures?: StructureId[];
   overlayModeProp?: MriOverlayMode;
   onOverlayModeChange?: (mode: MriOverlayMode) => void;
+  hidden?: boolean;
   onRasCrosshairChange: (mm: [number, number, number]) => void;
   onSelectStructureFromMri: (id: StructureId) => void;
   onQuizMriClick?: (id: StructureId) => void;
@@ -85,26 +84,10 @@ const LABEL_INDEX_TO_ID: Record<number, StructureId> = {
   16: 'QuadricepsTendon',
 };
 
-const SUBREGION_NAMES: Record<number, string> = {
-  1: 'Patellar Cartilage',
-  3: 'Medial Tibial Cartilage',
-  4: 'Lateral Tibial Cartilage',
-  5: 'Medial Meniscus',
-  6: 'Lateral Meniscus',
-  7: 'Femur',
-  8: 'Tibia',
-  9: 'Patella',
-  11: 'Trochlear Cartilage',
-  12: 'Med. Weight-Bearing Cartilage',
-  13: 'Lat. Weight-Bearing Cartilage',
-  14: 'Post. Med. Femoral Cartilage',
-  15: 'Post. Lat. Femoral Cartilage',
-};
-
 const PLANE_OPTIONS: Array<{ id: MriPlaneMode; label: string; sliceType: SLICE_TYPE }> = [
-  { id: 'sagittal', label: 'Sagittal', sliceType: SLICE_TYPE.SAGITTAL },
-  { id: 'coronal', label: 'Coronal', sliceType: SLICE_TYPE.CORONAL },
-  { id: 'axial', label: 'Axial', sliceType: SLICE_TYPE.AXIAL },
+  { id: 'sagittal', label: 'Sag', sliceType: SLICE_TYPE.SAGITTAL },
+  { id: 'coronal', label: 'Cor', sliceType: SLICE_TYPE.CORONAL },
+  { id: 'axial', label: 'Axi', sliceType: SLICE_TYPE.AXIAL },
   { id: 'multiplanar', label: 'MPR', sliceType: SLICE_TYPE.MULTIPLANAR },
 ];
 
@@ -178,6 +161,7 @@ export function RealKneeMriViewer({
   quizCandidateStructures,
   overlayModeProp,
   onOverlayModeChange,
+  hidden = false,
   onRasCrosshairChange,
   onSelectStructureFromMri,
   onQuizMriClick,
@@ -235,9 +219,7 @@ export function RealKneeMriViewer({
     [onOverlayModeChange]
   );
   const [segOpacity, setSegOpacity] = useState(0.32);
-  const [dragAction, setDragAction] = useState<'pan' | 'contrast'>('pan');
   const [sliceFrac, setSliceFrac] = useState(0.5);
-  const [tissueUnderCursor, setTissueUnderCursor] = useState<string | null>(null);
   const [canvasBox, setCanvasBox] = useState({ w: 0, h: 0 });
   const [pxPerMm, setPxPerMm] = useState(4.0);
   const [, setRenderTick] = useState(0);
@@ -464,18 +446,6 @@ export function RealKneeMriViewer({
       const segSample = loc.values?.[1]?.value;
       const p = propsRef.current;
 
-      if (!p.hideTargetForQuiz && typeof segSample === 'number') {
-        const rounded = Math.round(segSample);
-        if (overlayModeRef.current === 'subregions') {
-          setTissueUnderCursor(SUBREGION_NAMES[rounded] ?? null);
-        } else {
-          const structId = LABEL_INDEX_TO_ID[rounded];
-          setTissueUnderCursor(structId ? STRUCTURES_INFO[structId].shortLabel : null);
-        }
-      } else {
-        setTissueUnderCursor(null);
-      }
-
       const justClicked = performance.now() - userClickedAtRef.current < 320;
       if (justClicked && !suppressingSyncRef.current) {
         userClickedAtRef.current = 0;
@@ -515,6 +485,7 @@ export function RealKneeMriViewer({
         await nv.attachToCanvas(canvas);
         if (disposed) return;
         nv.setInterpolation(true);
+        nv.setDragMode(DRAG_MODE.pan);
         readyRef.current = true;
 
         setLoading(true);
@@ -628,6 +599,7 @@ export function RealKneeMriViewer({
     };
 
     const ro = new ResizeObserver(() => {
+      if (wrap.clientWidth < 40 || wrap.clientHeight < 40) return;
       const nv = nvRef.current;
       if (nv && readyRef.current) {
         nv.resizeListener?.();
@@ -664,13 +636,6 @@ export function RealKneeMriViewer({
     nv.volumes[0].cal_max = wl.max;
     nv.updateGLVolume();
   }, [contrastPreset, landmarks, presetMeta, loading]);
-
-  // Drag Mode Sync (Pan vs W/L)
-  useEffect(() => {
-    const nv = nvRef.current;
-    if (!nv || !readyRef.current) return;
-    nv.setDragMode(dragAction === 'pan' ? DRAG_MODE.pan : DRAG_MODE.contrast);
-  }, [dragAction]);
 
   // Plane Mode Sync
   useEffect(() => {
@@ -767,6 +732,20 @@ export function RealKneeMriViewer({
     }
   }, [loading, recomputeSpotlight]);
 
+  // Reflow persistent NiiVue canvas immediately when un-hidden from /3d or /report-guide
+  useEffect(() => {
+    if (hidden) return;
+    const id = window.requestAnimationFrame(() => {
+      const nv = nvRef.current;
+      const wrap = wrapRef.current;
+      if (!nv || !readyRef.current || !wrap || wrap.clientWidth < 40) return;
+      nv.resizeListener?.();
+      nv.drawScene();
+      recomputeSpotlight();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [hidden, recomputeSpotlight]);
+
   // Keyboard shortcut O toggles Anatomy Colors
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -845,22 +824,13 @@ export function RealKneeMriViewer({
             </button>
           )}
 
-          <button
-            type="button"
-            className={`chip-btn ${overlayMode !== 'none' ? 'active' : ''}`}
-            onClick={() => setOverlayMode((m) => (m === 'none' ? 'atlas' : 'none'))}
-            title="Toggle anatomical color overlay (O)"
-          >
-            <Palette size={13} />
-            <span>Colors</span>
-          </button>
-
           <div className="popover-anchor" ref={wlPopoverRef}>
             <button
               type="button"
               className={`chip-btn ${wlMenuOpen ? 'active' : ''}`}
               onClick={() => setWlMenuOpen((v) => !v)}
               aria-expanded={wlMenuOpen}
+              title="Window/Level & Color Segmentation Overlay"
             >
               <SlidersHorizontal size={13} />
               <span>W/L</span>
@@ -990,14 +960,9 @@ export function RealKneeMriViewer({
             <span>Jump to {targetBadge ?? 'Target'} Slice</span>
           </button>
         )}
-
-        {/* Subtle Tissue Under Crosshair Readout */}
-        {!loading && !hideTargetForQuiz && tissueUnderCursor && (
-          <div className="mri-tissue-readout">{tissueUnderCursor}</div>
-        )}
       </div>
 
-      {/* Bottom Scrubber + Drag Mode Toggle + Landmark-Centered Zoom Bar */}
+      {/* Bottom Scrubber + Landmark-Centered Zoom Bar */}
       <footer className="mri-footer-bar">
         <div className="slice-control">
           <span className="footer-label">Slice</span>
@@ -1014,16 +979,6 @@ export function RealKneeMriViewer({
         </div>
 
         <div className="mri-footer-right">
-          <button
-            type="button"
-            className={`mini-chip ${dragAction === 'pan' ? 'active' : ''}`}
-            onClick={() => setDragAction((d) => (d === 'pan' ? 'contrast' : 'pan'))}
-            title="Switch left-mouse drag between Pan and Window/Level"
-          >
-            <Hand size={12} />
-            <span>Drag: {dragAction === 'pan' ? 'Pan' : 'W/L'}</span>
-          </button>
-
           <div className="zoom-pill" role="group" aria-label="MRI zoom controls">
             <button
               type="button"

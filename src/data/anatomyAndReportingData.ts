@@ -3,7 +3,50 @@ import type {
   AppWorkspaceMode,
   PatientDemoPreset,
   ReportingGuideSection,
+  StructureId,
+  TissueGroup,
 } from '../types/atlas';
+
+export const ALL_STRUCTURE_IDS: StructureId[] = [
+  'Femur',
+  'Tibia',
+  'Patella',
+  'Fibula',
+  'FemoralCartilage',
+  'PatellarCartilage',
+  'MedialTibialCartilage',
+  'LateralTibialCartilage',
+  'MedialMeniscus',
+  'LateralMeniscus',
+  'ACL',
+  'PCL',
+  'MCL',
+  'LCL',
+  'QuadricepsTendon',
+  'PatellarTendon',
+];
+
+export const LAYER_GROUPS: Array<{
+  id: TissueGroup;
+  label: string;
+  structures: StructureId[];
+}> = [
+  { id: 'bone', label: 'Bones', structures: ['Femur', 'Tibia', 'Patella', 'Fibula'] },
+  {
+    id: 'cartilage',
+    label: 'Cartilage',
+    structures: [
+      'FemoralCartilage',
+      'PatellarCartilage',
+      'MedialTibialCartilage',
+      'LateralTibialCartilage',
+    ],
+  },
+  { id: 'meniscus', label: 'Menisci', structures: ['MedialMeniscus', 'LateralMeniscus'] },
+  { id: 'cruciate', label: 'Cruciates', structures: ['ACL', 'PCL'] },
+  { id: 'collateral', label: 'Collaterals', structures: ['MCL', 'LCL'] },
+  { id: 'extensor', label: 'Tendons', structures: ['QuadricepsTendon', 'PatellarTendon'] },
+];
 
 export function modeToPath(mode: AppWorkspaceMode): string {
   switch (mode) {
@@ -395,7 +438,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
     entries: [
       {
         structureId: 'FemoralCartilage',
-        label: 'Femoral Condylar & Trochlear Cartilage',
+        label: 'Femoral Cartilage',
         shortMeta: '1.7–2.3 mm hyaline arc',
         defaultLandmark: {
           id: 'anat-fem-cart',
@@ -514,7 +557,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
     entries: [
       {
         structureId: 'MedialMeniscus',
-        label: 'Medial Meniscus (C-Shaped)',
+        label: 'Medial Meniscus',
         shortMeta: 'PH 2× > AH · Tethered to dMCL',
         defaultLandmark: {
           id: 'anat-med-men',
@@ -613,7 +656,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
       },
       {
         structureId: 'LateralMeniscus',
-        label: 'Lateral Meniscus (O-Shaped)',
+        label: 'Lateral Meniscus',
         shortMeta: 'Symmetric Bow-Tie · Popliteal Hiatus',
         defaultLandmark: {
           id: 'anat-lat-men',
@@ -673,7 +716,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
     entries: [
       {
         structureId: 'ACL',
-        label: 'Anterior Cruciate Ligament (ACL)',
+        label: 'ACL',
         shortMeta: 'PM Lat. Condyle -> AM Tibia',
         defaultLandmark: {
           id: 'anat-acl',
@@ -749,7 +792,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
       },
       {
         structureId: 'PCL',
-        label: 'Posterior Cruciate Ligament (PCL)',
+        label: 'PCL',
         shortMeta: 'Uniform 3–4 mm black arc',
         defaultLandmark: {
           id: 'anat-pcl',
@@ -809,7 +852,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
     entries: [
       {
         structureId: 'MCL',
-        label: 'Medial Collateral Ligament (MCL)',
+        label: 'MCL',
         shortMeta: '3-layer valgus stabilizer',
         defaultLandmark: {
           id: 'anat-mcl',
@@ -837,7 +880,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
       },
       {
         structureId: 'LCL',
-        label: 'Lateral Collateral Ligament (LCL)',
+        label: 'LCL',
         shortMeta: 'Cord-like -> Fibular Head',
         defaultLandmark: {
           id: 'anat-lcl',
@@ -900,7 +943,7 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
       },
       {
         structureId: 'PatellarTendon',
-        label: 'Patellar Tendon (Ligament)',
+        label: 'Patellar Tendon',
         shortMeta: '3–5 mm thick · Insall-Salvati',
         defaultLandmark: {
           id: 'anat-pat-tendon',
@@ -952,10 +995,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Never call an occult fracture without checking T1 / non-fat-suppressed images for a discrete cortical/trabecular line.',
-        dictationNormal:
-          'Marrow signal intensity is normal throughout the distal femur, proximal tibia, fibula, and patella without fracture or marrow contusion.',
-        dictationAbnormal:
-          'Geographic bone marrow contusion without discrete T1 fracture line involving the lateral femoral condyle and posterolateral tibial plateau.',
         linkedMode: 'anatomy',
         linkedStructureId: 'Femur',
       },
@@ -972,10 +1011,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Rule of Two: Confirm any meniscal or chondral lesion on >= 2 consecutive slices or 2 orthogonal planes.',
-        dictationNormal:
-          'Systematic evaluation across sagittal, coronal, and axial 3D sequences demonstrates preserved internal derangement structures.',
-        dictationAbnormal:
-          'Multisequence correlation confirms full-thickness internal derangement confirmed across two orthogonal planes.',
         linkedMode: 'anatomy',
         linkedStructureId: 'MedialMeniscus',
       },
@@ -1003,10 +1038,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Check peripheral vs central third ("red zone vs white zone") and articular surface contact on >= 2 slices.',
-        dictationNormal:
-          'Medial and lateral menisci demonstrate normal triangular morphology and homogeneous low signal without surface-extending tear or extrusion.',
-        dictationAbnormal:
-          'Horizontal cleavage tear of the medial meniscal posterior horn and body extending to the meniscocapsular junction with a lobulated medial parameniscal cyst.',
         linkedMode: 'pathology',
         linkedModuleId: 'meniscal-tears-3d',
       },
@@ -1023,10 +1054,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Always measure fragment displacement into the notch — a displaced fragment is an urgent surgical locking finding.',
-        dictationNormal:
-          'No displaced meniscal fragment within the intercondylar notch; normal bow-tie configuration preserved.',
-        dictationAbnormal:
-          'Displaced bucket-handle tear of the medial meniscus with a flipped central fragment parallel to the intact PCL ("Double PCL sign") and a truncated peripheral remnant.',
         linkedMode: 'pathology',
         linkedModuleId: 'bucket-handle',
       },
@@ -1043,10 +1070,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Measure extrusion on the coronal slice intersecting the MCL body from the outer meniscal edge to the tibial osteophyte-excluded cortex.',
-        dictationNormal:
-          'Anterior and posterior meniscal root attachments are intact without meniscal extrusion.',
-        dictationAbnormal:
-          'Complete radial tear of the posterior medial meniscal root ("Ghost sign") resulting in 4.2 mm medial meniscal extrusion past the tibial plateau margin.',
         linkedMode: 'pathology',
         linkedModuleId: 'posterior-root',
       },
@@ -1075,10 +1098,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Always check for associated Ramp lesion (posterior meniscocapsular separation) and Segond avulsion in acute ACL tears.',
-        dictationNormal:
-          'Anterior cruciate ligament is intact with normal taut course parallel to the intercondylar roof.',
-        dictationAbnormal:
-          'Complete proximal tear of the ACL with fiber discontinuity, +7.6 mm anterior tibial translation, and pivot-shift bone marrow contusions of the lateral femoral condyle and posterolateral tibial plateau.',
         linkedMode: 'pathology',
         linkedModuleId: 'acl-rupture',
       },
@@ -1095,10 +1114,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Always inspect the Posterolateral Corner (LCL + popliteus) — isolated PCL tears are rare in high-energy trauma.',
-        dictationNormal:
-          'Posterior cruciate ligament demonstrates uniform low signal intensity and smooth curvilinear contour.',
-        dictationAbnormal:
-          'High-grade intrasubstance tear of the PCL with posterior tibial sag and anterior proximal tibial marrow contusion.',
         linkedMode: 'pathology',
         linkedModuleId: 'pcl-dashboard',
       },
@@ -1124,10 +1139,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Always pair valgus MCL assessment with ACL and Medial/Lateral Meniscus check.',
-        dictationNormal:
-          'Superficial and deep bands of the medial collateral ligament are intact without pericapsular edema.',
-        dictationAbnormal:
-          'Grade II–III proximal MCL disruption with extensive periligamentous edema, accompanying ACL rupture and medial meniscal tear (O’Donoghue triad pattern).',
         linkedMode: 'pathology',
         linkedModuleId: 'unhappy-triad',
       },
@@ -1142,10 +1153,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Report LCL, biceps femoris, and popliteus together — missed PLC tears cause ACL/PCL graft failure.',
-        dictationNormal:
-          'LCL, biceps femoris tendon, and popliteus myotendinous unit of the posterolateral corner are intact.',
-        dictationAbnormal:
-          'Posterolateral corner injury with distal LCL avulsion and fibular styloid marrow edema ("arcuate" pattern).',
         linkedMode: 'anatomy',
         linkedStructureId: 'LCL',
       },
@@ -1172,10 +1179,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Assess TT-TG distance (> 20 mm abnormal), Patella Alta (Insall-Salvati > 1.3), and trochlear sulcus angle (> 145° dysplastic).',
-        dictationNormal:
-          'Patella is normally centered within the trochlear groove with intact medial patellofemoral ligament and extensor tendons.',
-        dictationAbnormal:
-          'Signature findings of recent transient lateral patellar dislocation: complete MPFL tear at the femoral origin, lateral patellar tilt, and kissing contusions of the inferomedial patella and anterolateral femoral condyle.',
         linkedMode: 'pathology',
         linkedModuleId: 'patellar-dislocation',
       },
@@ -1190,9 +1193,6 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Calculate Insall-Salvati ratio on sagittal midline slice (patellar tendon / patellar pole length; normal 0.8–1.2).',
-        dictationNormal: 'Quadriceps tendon, patellar tendon, and Hoffa infrapatellar fat pad are unremarkable.',
-        dictationAbnormal:
-          'Proximal patellar tendinopathy with focal posterior signal hyperintensity and mild superolateral Hoffa fat pad edema.',
         linkedMode: 'anatomy',
         linkedStructureId: 'PatellarTendon',
       },
@@ -1220,47 +1220,8 @@ export const MRI_REPORTING_SECTIONS: ReportingGuideSection[] = [
         ],
         gradingOrRule:
           'Check every focal defect for unstable peripheral flaps (fluid undermining cartilage–bone interface).',
-        dictationNormal:
-          'Articular cartilage surfaces are preserved across the medial, lateral, and patellofemoral compartments.',
-        dictationAbnormal:
-          'Full-thickness (Outerbridge Grade IV) chondral loss over the weight-bearing medial femoral condyle with subchondral marrow edema and marginal osteophyte formation.',
         linkedMode: 'pathology',
         linkedModuleId: 'chondral-oa',
-      },
-    ],
-  },
-  {
-    id: 'dictation-template',
-    stepNumber: '07',
-    title: 'Copyable Structured Knee MRI Template',
-    subtitle: 'Clean compartment-by-compartment PowerScribe skeleton.',
-    takeaway: 'Keep findings grouped strictly by compartment so orthopedic surgeons can scan in 10 seconds.',
-    cards: [
-      {
-        id: 'tmpl-complete',
-        title: 'Complete Structured Normal Knee Template',
-        bestPlanes: 'Standard 3T Multi-Planar Knee MRI',
-        normalLook: 'Ready-to-paste structured report skeleton covering all compartments.',
-        pathologySigns: [
-          'Edit only involved compartments; leave normal compartments concise and parallel.',
-          'Include alignment/tracking measurements (extrusion mm, TT-TG) whenever abnormal.',
-        ],
-        gradingOrRule: 'Keep Impression numbered by clinical priority (1. Surgical lesion, 2. Secondary/cartilage, 3. Effusion).',
-        dictationNormal: `EXAM: MRI RIGHT KNEE WITHOUT IV CONTRAST (3T qDESS)
-FINDINGS:
-- BONES & MARROW: Normal alignment and marrow signal without fracture, contusion, or osteonecrosis.
-- MEDIAL COMPARTMENT: Medial meniscus and posterior root are intact without tear or extrusion. Weight-bearing articular cartilage is preserved.
-- LATERAL COMPARTMENT: Lateral meniscus is intact without tear. Lateral compartment articular cartilage is preserved.
-- PATELLOFEMORAL: Patella centers cleanly in the trochlear groove; MPFL and retropatellar cartilage are intact.
-- LIGAMENTS & TENDONS: ACL, PCL, MCL, LCL, posterolateral corner, quadriceps tendon, and patellar tendon are intact.
-- JOINT / SOFT TISSUES: No significant joint effusion or popliteal cyst.
-
-IMPRESSION:
-1. Unremarkable 3T MRI of the right knee without internal derangement.`,
-        dictationAbnormal: `IMPRESSION EXAMPLES:
-1. Complete proximal ACL tear with +7.6 mm anterior tibial drawer and pivot-shift bone bruises; intact PCL.
-2. Displaced medial meniscal bucket-handle tear ("Double PCL sign") with truncated peripheral rim.
-3. Transient lateral patellar dislocation footprint: torn femoral-origin MPFL with kissing medial patellar and anterolateral condylar bruises.`,
       },
     ],
   },

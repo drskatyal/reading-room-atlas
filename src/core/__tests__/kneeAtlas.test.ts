@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { computeKneeKinematics, rasToThree, threeToRas } from '../coordinates';
 import {
+  ALL_STRUCTURE_IDS,
   ANATOMY_SYSTEM_GROUPS,
+  LAYER_GROUPS,
   modeToPath,
   MRI_REPORTING_SECTIONS,
   PATIENT_DEMO_PRESETS,
@@ -13,6 +15,7 @@ import {
   RESIDENT_QUIZ_QUESTIONS,
   STRUCTURES_INFO,
 } from '../../data/kneeClinicalAtlas';
+import { PATHOLOGY_REPORTING_DETAILS } from '../../data/pathologyReportingData';
 
 describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
   it('round-trips RAS <-> Three.js coordinates accurately', () => {
@@ -46,7 +49,7 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
     expect(patDisloc.patellaLateralShiftX).toBeLessThan(-0.4);
   });
 
-  it('provides 17 Radiology Assistant modules, MRI annotations, valid sub-steps & PowerScribe reports', () => {
+  it('provides 17 modules, MRI annotations, valid sub-steps & reports', () => {
     const normalModules = KNEE_MODULES.filter((m) => m.category === 'normal');
     const approachModules = KNEE_MODULES.filter((m) => m.category === 'approach');
     const pathModules = KNEE_MODULES.filter((m) => m.category === 'pathology');
@@ -64,12 +67,15 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
         for (const step of mod.subSteps) {
           expect(step.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
         }
+        const detail = PATHOLOGY_REPORTING_DETAILS[mod.id];
+        expect(detail).toBeDefined();
+        expect(detail.grades.length).toBeGreaterThanOrEqual(3);
+        expect(detail.howToReport.length).toBeGreaterThanOrEqual(4);
       }
       const kin = computeKneeKinematics(mod.subSteps[0].flexionDeg, mod.id, 0.04, 'Right');
       const rep = buildKneeFellowshipReport(mod.id, mod.subSteps[0].flexionDeg, kin.anteriorDrawerMm);
       expect(rep.findings.length).toBeGreaterThanOrEqual(3);
       expect(rep.impression.length).toBeGreaterThanOrEqual(1);
-      expect(rep.dictationText).toContain('FINDINGS:');
     }
   });
 
@@ -84,40 +90,51 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
     }
   });
 
-  it('covers all 16 anatomical structures + sub-landmarks across 6 groups with MRI overlays', () => {
-    const coveredIds = new Set<string>();
+  it('covers all 16 structures across LAYER_GROUPS and ANATOMY_SYSTEM_GROUPS with MRI overlays', () => {
+    expect(ALL_STRUCTURE_IDS.length).toBe(16);
+    expect(LAYER_GROUPS.length).toBe(6);
+
+    const layerCovered = new Set(LAYER_GROUPS.flatMap((g) => g.structures));
+    for (const sid of ALL_STRUCTURE_IDS) {
+      expect(layerCovered.has(sid)).toBe(true);
+      expect(sid in STRUCTURES_INFO).toBe(true);
+    }
+
+    const treeCovered = new Set<string>();
     let totalLandmarks = 0;
 
     for (const group of ANATOMY_SYSTEM_GROUPS) {
       for (const entry of group.entries) {
-        coveredIds.add(entry.structureId);
+        treeCovered.add(entry.structureId);
         expect(entry.defaultLandmark.structureId).toBe(entry.structureId);
-        expect((entry.defaultLandmark.mriAnnotations?.length ?? 0)).toBeGreaterThanOrEqual(1);
+        expect(entry.defaultLandmark.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
         totalLandmarks += 1;
 
         for (const sub of entry.subLandmarks ?? []) {
           expect(sub.structureId).toBe(entry.structureId);
           expect(sub.targetRas?.length).toBe(3);
-          expect((sub.mriAnnotations?.length ?? 0)).toBeGreaterThanOrEqual(1);
+          expect(sub.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
           totalLandmarks += 1;
         }
       }
     }
 
-    for (const sid of Object.keys(STRUCTURES_INFO)) {
-      expect(coveredIds.has(sid)).toBe(true);
+    for (const sid of ALL_STRUCTURE_IDS) {
+      expect(treeCovered.has(sid)).toBe(true);
     }
     expect(totalLandmarks).toBeGreaterThanOrEqual(30);
   });
 
-  it('validates reporting guide sections, patient presets, and SPA path routing', () => {
-    expect(MRI_REPORTING_SECTIONS.length).toBe(7);
+  it('validates 6 dictation-free reporting sections, patient presets, and SPA path routing', () => {
+    expect(MRI_REPORTING_SECTIONS.length).toBe(6);
     const validModuleIds = new Set(KNEE_MODULES.map((m) => m.id));
     for (const sec of MRI_REPORTING_SECTIONS) {
       expect(sec.cards.length).toBeGreaterThanOrEqual(1);
       for (const card of sec.cards) {
-        expect(card.dictationNormal.length).toBeGreaterThan(20);
-        expect(card.dictationAbnormal.length).toBeGreaterThan(20);
+        expect(card.normalLook.length).toBeGreaterThan(10);
+        expect(card.pathologySigns.length).toBeGreaterThanOrEqual(1);
+        expect('dictationNormal' in card).toBe(false);
+        expect('dictationAbnormal' in card).toBe(false);
         if (card.linkedModuleId) expect(validModuleIds.has(card.linkedModuleId)).toBe(true);
         if (card.linkedStructureId) expect(card.linkedStructureId in STRUCTURES_INFO).toBe(true);
       }
