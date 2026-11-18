@@ -16,6 +16,11 @@ import {
   STRUCTURES_INFO,
 } from '../../data/kneeClinicalAtlas';
 import { PATHOLOGY_REPORTING_DETAILS } from '../../data/pathologyReportingData';
+import {
+  FIVE_PASS_SCROLL_ORDER,
+  RA_GUIDE_CHAPTERS,
+  SIX_BLIND_SPOTS,
+} from '../../data/radiologyAssistantGuideData';
 
 describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
   it('round-trips RAS <-> Three.js coordinates accurately', () => {
@@ -156,5 +161,21 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
     expect(pathToMode('/quiz')).toBe('quiz');
     expect(modeToPath('fullscreen-3d')).toBe('/3d');
     expect(modeToPath('report-guide')).toBe('/report-guide');
+
+    expect(FIVE_PASS_SCROLL_ORDER).toHaveLength(5);
+    expect(RA_GUIDE_CHAPTERS).toHaveLength(6);
+    expect(SIX_BLIND_SPOTS).toHaveLength(6);
+    for (const chapter of RA_GUIDE_CHAPTERS) {
+      for (const plate of chapter.plates) {
+        expect(plate.imageSrc.startsWith('/guide/')).toBe(true);
+        expect(plate.imageSrc.endsWith('.png')).toBe(true);
+        if (plate.link?.moduleId) {
+          expect(KNEE_MODULES.some((m) => m.id === plate.link?.moduleId)).toBe(true);
+        }
+        if (plate.link?.structureId) {
+          expect(STRUCTURES_INFO[plate.link.structureId]).toBeDefined();
+        }
+      }
+    }
   });
 });
