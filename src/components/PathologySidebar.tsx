@@ -1,10 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-react';
-import { KNEE_MODULES } from '../data/kneeClinicalAtlas';
-import { PATHOLOGY_REPORTING_DETAILS } from '../data/pathologyReportingData';
-import type { KneeModuleId } from '../types/atlas';
+import type { JointAtlasDefinition, KneeModuleId } from '../types/atlas';
 
 interface PathologySidebarProps {
+  jointDef: JointAtlasDefinition;
   activeModuleId: KneeModuleId;
   subStepIndex: number;
   onSelectModule: (id: KneeModuleId) => void;
@@ -16,20 +15,12 @@ interface PathologySidebarProps {
   onOpenReportGuide: () => void;
 }
 
-const PATHOLOGY_MODULES = KNEE_MODULES.filter((m) => m.category === 'pathology');
-const MOTION_SLIDER_MODULES = new Set<KneeModuleId>([
-  'acl-rupture',
-  'pcl-dashboard',
-  'patellar-dislocation',
-  'unhappy-triad',
-  'chondral-oa',
-]);
-
 function stripLeadingNumber(label: string): string {
   return label.replace(/^\d+\.\s*/, '');
 }
 
 export function PathologySidebar({
+  jointDef,
   activeModuleId,
   subStepIndex,
   onSelectModule,
@@ -42,34 +33,43 @@ export function PathologySidebar({
 }: PathologySidebarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const pathologyModules = useMemo(
+    () => jointDef.modules.filter((m) => m.category === 'pathology'),
+    [jointDef.modules]
+  );
+  const motionModules = useMemo(
+    () => new Set(jointDef.kinematicConfig.motionModules ?? []),
+    [jointDef.kinematicConfig.motionModules]
+  );
+
   const activeIdx = Math.max(
     0,
-    PATHOLOGY_MODULES.findIndex((m) => m.id === activeModuleId)
+    pathologyModules.findIndex((m) => m.id === activeModuleId)
   );
-  const activeMod = PATHOLOGY_MODULES[activeIdx] ?? PATHOLOGY_MODULES[0];
+  const activeMod = pathologyModules[activeIdx] ?? pathologyModules[0];
   const activeStep = activeMod.subSteps[subStepIndex] ?? activeMod.subSteps[0];
-  const detail = PATHOLOGY_REPORTING_DETAILS[activeMod.id];
+  const detail = jointDef.pathologyReportingDetails[activeMod.id];
   const isPatella = activeMod.biomechControl === 'patella-reduction';
-  const showMotionSlider = MOTION_SLIDER_MODULES.has(activeMod.id);
+  const showMotionSlider = motionModules.has(activeMod.id);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
     }
-  }, [activeMod.id]);
+  }, [activeMod.id, jointDef.id]);
 
   return (
-    <aside className="mode-sidebar pathology-sidebar" aria-label="Radiology Assistant pathology reference">
+    <aside className="mode-sidebar pathology-sidebar" aria-label="Pathology diagnostic and reporting reference">
       {/* Compact Top Picker + 3-Step Visual Finding Tabs + Optional Motion Slider */}
       <div className="sidebar-sticky-head patho-sticky-head">
         <div className="patho-select-row">
           <select
             className="patho-select"
             value={activeMod.id}
-            onChange={(e) => onSelectModule(e.target.value as KneeModuleId)}
-            aria-label="Select knee pathology"
+            onChange={(e) => onSelectModule(e.target.value)}
+            aria-label={`Select ${jointDef.shortName.toLowerCase()} pathology`}
           >
-            {PATHOLOGY_MODULES.map((mod, idx) => (
+            {pathologyModules.map((mod, idx) => (
               <option key={mod.id} value={mod.id}>
                 {idx + 1}. {mod.shortTitle}
               </option>
@@ -80,7 +80,7 @@ export function PathologySidebar({
             <button
               type="button"
               className="arrow-btn"
-              onClick={() => onSelectModule(PATHOLOGY_MODULES[activeIdx - 1].id)}
+              onClick={() => onSelectModule(pathologyModules[activeIdx - 1].id)}
               disabled={activeIdx <= 0}
               aria-label="Previous pathology"
               title="Previous pathology"
@@ -90,8 +90,8 @@ export function PathologySidebar({
             <button
               type="button"
               className="arrow-btn"
-              onClick={() => onSelectModule(PATHOLOGY_MODULES[activeIdx + 1].id)}
-              disabled={activeIdx >= PATHOLOGY_MODULES.length - 1}
+              onClick={() => onSelectModule(pathologyModules[activeIdx + 1].id)}
+              disabled={activeIdx >= pathologyModules.length - 1}
               aria-label="Next pathology"
               title="Next pathology"
             >
@@ -118,11 +118,11 @@ export function PathologySidebar({
 
         {showMotionSlider && (
           <label className="fs-motion-row patho-motion-row">
-            <span>{isPatella ? 'Patella Slip' : 'Flexion'}</span>
+            <span>{isPatella ? 'Patella Slip' : jointDef.kinematicConfig.sliderLabel}</span>
             <input
               type="range"
-              min={0}
-              max={isPatella ? 1 : 90}
+              min={isPatella ? 0 : jointDef.kinematicConfig.minDeg}
+              max={isPatella ? 1 : jointDef.kinematicConfig.maxDeg}
               step={isPatella ? 0.05 : 2}
               value={isPatella ? patellaSubluxation : flexionDeg}
               onChange={(e) =>
@@ -130,7 +130,7 @@ export function PathologySidebar({
                   ? onChangePatellaSubluxation(Number(e.target.value))
                   : onChangeFlexionDeg(Number(e.target.value))
               }
-              aria-label={isPatella ? 'Patellar subluxation slider' : 'Knee flexion slider'}
+              aria-label={isPatella ? 'Patellar subluxation slider' : `${jointDef.shortName} motion slider`}
             />
             <span className="slider-val">
               {isPatella ? `${Math.round(patellaSubluxation * 100)}%` : `${flexionDeg}°`}
@@ -139,9 +139,9 @@ export function PathologySidebar({
         )}
       </div>
 
-      {/* Scrollable Radiology Assistant Editorial Article */}
+      {/* Scrollable Fellowship Pathology Reference Article */}
       <div ref={scrollRef} className="patho-editorial-scroll">
-        <div className="patho-plane-tag">{detail?.sequencesAndPlanes ?? '3T qDESS / PD'}</div>
+        <div className="patho-plane-tag">{detail?.sequencesAndPlanes ?? jointDef.mriSpecLabel}</div>
         <h2 className="patho-article-title">{activeMod.title}</h2>
         <div className="patho-hallmark">{activeMod.diagnosticSign}</div>
         <p className="patho-prose">{detail?.mechanism ?? activeMod.summary}</p>
@@ -202,7 +202,7 @@ export function PathologySidebar({
 
           <button type="button" className="patho-guide-link" onClick={onOpenReportGuide}>
             <BookOpen size={12} />
-            <span>Full Knee MRI Reporting Guide →</span>
+            <span>Full {jointDef.shortName} MRI Reporting Guide →</span>
           </button>
         </section>
       </div>

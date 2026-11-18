@@ -1,0 +1,202 @@
+import {
+  ANATOMY_SYSTEM_GROUPS,
+  LAYER_GROUPS,
+  PATIENT_DEMO_PRESETS,
+} from '../anatomyAndReportingData';
+import {
+  KNEE_MODULES,
+  MRI_CONTRAST_PRESETS,
+  RESIDENT_QUIZ_QUESTIONS,
+  STRUCTURES_INFO,
+} from '../kneeClinicalAtlas';
+import { PATHOLOGY_REPORTING_DETAILS } from '../pathologyReportingData';
+import {
+  FIVE_PASS_SCROLL_ORDER,
+  RA_GUIDE_CHAPTERS,
+  SIX_BLIND_SPOTS,
+} from '../radiologyAssistantGuideData';
+import type { JointAtlasDefinition } from '../../types/atlas';
+
+export const KNEE_ATLAS: JointAtlasDefinition = {
+  id: 'knee',
+  name: 'Knee 3T MRI & Biomechanics',
+  shortName: 'Knee',
+  scannerBadge: '3T Knee',
+  tagline: 'In-Vivo 3.0T qDESS · Menisci, Cruciates, Collateral Corners & Patellofemoral',
+  heroSummary:
+    'Interactive 16-structure 3D knee dissection synced voxel-for-voxel with an authentic 0.31 mm isotropic 3.0T qDESS MRI volume, covering meniscal tear geometries, pivot-shift cruciate instability, SIFK, and patellar dislocation mechanics.',
+  clinicalHighlights: [
+    '10 interactive pathology clinics incl. Ramp & Wrisberg Rip + SIFK',
+    'Dynamic Lachman anterior drawer, posterior sag & patellar subluxation sliders',
+    '16-tissue & OA cartilage subregion color overlays + Quantitative mm thickness map',
+  ],
+  previewPlateSrc: '/guide/sag-notch-overview.png',
+  glbUrl: '/models/knee-invivo-3t.glb',
+  mriVolumeUrl: '/volumes/knee-invivo-3t-qdess.nii.gz',
+  mriSegUrl: '/volumes/knee-invivo-seg.nii.gz',
+  mriSubregionSegUrl: '/volumes/knee-invivo-subregions.nii.gz',
+  landmarksUrl: '/data/knee-landmarks.json',
+  mriSpecLabel: '3T OpenMSK qDESS',
+  mriSliceTitle: '3T qDESS MRI',
+  supportsSubregionOverlay: true,
+  supportsPlateauView: true,
+  supportsCartilageMap: true,
+  cartilageMaxMmLabel: '3.8 mm',
+  defaultMriSliceRas: [112.6, 20.6, -11.9],
+  cameraPresets: {
+    anterior: { label: 'Anterior', pos: [0.22, 0.55, 8.5], target: [0.0, 0.18, 0.15] },
+    medial: { label: 'Medial', pos: [8.1, 0.45, 1.85], target: [0.15, 0.15, 0.12] },
+    lateral: { label: 'Lateral', pos: [-8.1, 0.45, 1.65], target: [-0.15, 0.15, 0.08] },
+    posterior: { label: 'Posterior', pos: [-0.2, 0.65, -8.3], target: [0.0, 0.12, -0.05] },
+    notch: { label: 'Notch', pos: [0.16, -0.42, 6.75], target: [0.0, 0.16, 0.08] },
+    plateau: { label: 'Plateau Top', pos: [0.12, 7.65, 2.85], target: [0.1, -0.16, 0.06] },
+  },
+  allPinStructures: [
+    'Femur',
+    'Tibia',
+    'Patella',
+    'MedialMeniscus',
+    'LateralMeniscus',
+    'ACL',
+    'PCL',
+    'MCL',
+  ],
+  boneNames: ['Femur', 'Tibia', 'Fibula', 'Patella'],
+  cartilageNames: [
+    'FemoralCartilage',
+    'MedialTibialCartilage',
+    'LateralTibialCartilage',
+    'PatellarCartilage',
+  ],
+  fibrocartilageNames: [
+    'MedialMeniscus',
+    'LateralMeniscus',
+    'MedialMeniscusTruncated',
+    'BucketHandleFragment',
+  ],
+  ligamentNames: ['ACL', 'PCL', 'MCL', 'LCL'],
+  tendonNames: ['PatellarTendon', 'QuadricepsTendon'],
+  kinematicConfig: {
+    sliderLabel: 'Flexion',
+    minDeg: 0,
+    maxDeg: 90,
+    defaultDeg: 6,
+    pivotFallback: [0.1652, 1.0475, 0.0868],
+    axisFallback: [1, 0, 0],
+    movingStructures: [
+      'Tibia',
+      'Fibula',
+      'MedialTibialCartilage',
+      'LateralTibialCartilage',
+      'LateralMeniscus',
+      'ACL',
+      'PCL',
+      'MCL',
+      'LCL',
+      'BucketHandleFragment',
+    ],
+    patellaStructures: ['Patella', 'PatellarCartilage', 'PatellarTendon', 'QuadricepsTendon'],
+    medialMeniscusStructures: ['MedialMeniscus', 'MedialMeniscusTruncated'],
+    motionModules: [
+      'acl-rupture',
+      'pcl-dashboard',
+      'patellar-dislocation',
+      'unhappy-triad',
+      'chondral-oa',
+      'ramp-wrisberg',
+    ],
+  },
+  layerGroups: LAYER_GROUPS,
+  anatomySystemGroups: ANATOMY_SYSTEM_GROUPS,
+  structuresInfo: STRUCTURES_INFO,
+  mriContrastPresets: MRI_CONTRAST_PRESETS,
+  modules: KNEE_MODULES,
+  pathologyReportingDetails: PATHOLOGY_REPORTING_DETAILS,
+  patientDemoPresets: PATIENT_DEMO_PRESETS,
+  quizQuestions: RESIDENT_QUIZ_QUESTIONS,
+  reportGuide: {
+    eyebrow: 'Musculoskeletal MRI Reference · 3.0T OpenMSK qDESS',
+    title: 'MRI of the Knee — Systematic Approach',
+    subtitle:
+      'A structured reading-room routine modeled for orthopedic and radiology residents: review every structure in order across orthogonal planes so subtle tears and secondary footprints are never missed.',
+    fivePassOrder: FIVE_PASS_SCROLL_ORDER,
+    chapters: RA_GUIDE_CHAPTERS,
+    blindSpotsTitle: 'Six Blind Spots Before Signing Out',
+    blindSpotsLead:
+      'Run this brief check after dictating your primary impression—these six regions hold the highest rate of clinically consequential misses on routine knee MRI.',
+    blindSpots: SIX_BLIND_SPOTS,
+  },
+  pathology3DSpecs: [
+    {
+      moduleId: 'ramp-wrisberg',
+      subStepId: 'ramp-cleft',
+      damagedStructures: ['MedialMeniscus', 'ACL'],
+      primitives: [
+        {
+          kind: 'bruise',
+          centerRas: [87.0, 5.5, -24.5],
+          radiiMm: [7.0, 5.5, 6.0],
+          tone: 'amber',
+          parent: 'distal',
+        },
+      ],
+    },
+    {
+      moduleId: 'ramp-wrisberg',
+      subStepId: 'wrisberg-rip',
+      damagedStructures: ['LateralMeniscus'],
+      primitives: [
+        {
+          kind: 'tear-cleft',
+          pointsRas: [
+            [128.0, 6.5, -13.0],
+            [132.0, 8.5, -14.8],
+            [136.0, 10.5, -16.2],
+          ],
+          radiusMm: 1.4,
+          tone: 'crimson',
+          parent: 'distal',
+        },
+      ],
+    },
+    {
+      moduleId: 'sifk-hoffa',
+      subStepId: 'sifk-crescent',
+      damagedStructures: ['FemoralCartilage'],
+      primitives: [
+        {
+          kind: 'tear-cleft',
+          pointsRas: [
+            [84.5, 19.0, -6.8],
+            [90.5, 19.0, -7.8],
+            [96.5, 19.0, -6.5],
+          ],
+          radiusMm: 1.5,
+          tone: 'crimson',
+          parent: 'proximal',
+        },
+        {
+          kind: 'bruise',
+          centerRas: [90.5, 19.0, 2.0],
+          radiiMm: [9.5, 8.0, 7.5],
+          tone: 'amber',
+          parent: 'proximal',
+        },
+      ],
+    },
+    {
+      moduleId: 'sifk-hoffa',
+      subStepId: 'hoffa-impingement',
+      damagedStructures: ['PatellarTendon'],
+      primitives: [
+        {
+          kind: 'cyst-effusion',
+          centerRas: [129.0, 45.0, 12.0],
+          radiiMm: [6.5, 6.5, 6.0],
+          tone: 'amber',
+          parent: 'proximal',
+        },
+      ],
+    },
+  ],
+};

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ThemeMode } from '../types/atlas';
+import type { JointAtlasDefinition, JointId, ThemeMode } from '../types/atlas';
 
 export const BONE_NAMES = new Set(['Femur', 'Tibia', 'Fibula']);
 export const EXTENSOR_NAMES = new Set([
@@ -290,10 +290,15 @@ function smoothstep01(edge0: number, edge1: number, x: number): number {
  */
 export function applyBoneOsteologyShading(
   geometry: THREE.BufferGeometry,
-  meshName: string
+  meshName: string,
+  jointId: JointId = 'knee'
 ): void {
   const posAttr = geometry.getAttribute('position');
   if (!posAttr || posAttr.count === 0) return;
+
+  geometry.computeBoundingBox();
+  const minY = geometry.boundingBox?.min.y ?? -3;
+  const maxY = geometry.boundingBox?.max.y ?? 3;
 
   const vertCount = posAttr.count;
   const vToWeld = new Int32Array(vertCount);
@@ -459,7 +464,7 @@ export function applyBoneOsteologyShading(
     const wny = wNorm[w * 3 + 1];
 
     let regionOcc = 0;
-    if (meshName === 'Femur') {
+    if (jointId === 'knee' && meshName === 'Femur') {
       if (Math.abs(px) < 0.62 && py > -0.25 && py < 0.8 && pz > -0.65 && pz < 0.55) {
         const fx = Math.pow(Math.max(0, 1 - (px / 0.62) ** 2), 1.5);
         const fy = Math.pow(Math.max(0, 1 - ((py - 0.275) / 0.525) ** 2), 1.5);
@@ -472,7 +477,7 @@ export function applyBoneOsteologyShading(
       if (wny > 0.55 && py > 2.4) {
         regionOcc += smoothstep01(0.55, 0.9, wny) * smoothstep01(2.4, 2.65, py) * 0.18;
       }
-    } else if (meshName === 'Tibia') {
+    } else if (jointId === 'knee' && meshName === 'Tibia') {
       if (Math.abs(px) < 0.58 && py > -0.38) {
         const fx = Math.pow(Math.max(0, 1 - (px / 0.58) ** 2), 1.5);
         const fy = smoothstep01(-0.38, -0.02, py);
@@ -484,9 +489,15 @@ export function applyBoneOsteologyShading(
       if (wny < -0.55 && py < -2.2) {
         regionOcc += smoothstep01(-0.55, -0.9, wny) * smoothstep01(-2.2, -2.4, py) * 0.14;
       }
-    } else if (meshName === 'Fibula') {
+    } else if (jointId === 'knee' && meshName === 'Fibula') {
       if (py < -2.25) {
         regionOcc += smoothstep01(-2.25, -2.65, py) * 0.14;
+      }
+    } else if (meshName !== 'Patella') {
+      if (wny > 0.68 && py > maxY - 0.18) {
+        regionOcc += smoothstep01(0.68, 0.94, wny) * smoothstep01(maxY - 0.18, maxY - 0.02, py) * 0.16;
+      } else if (wny < -0.68 && py < minY + 0.18) {
+        regionOcc += smoothstep01(-0.68, -0.94, wny) * smoothstep01(minY + 0.18, minY + 0.02, py) * 0.14;
       }
     }
 
@@ -563,7 +574,8 @@ export function createTissueMaterial(
   name: string,
   clipPlane: THREE.Plane,
   bank: AnatomyTextureBank,
-  xrayUniform: { uXrayMode: { value: number } }
+  xrayUniform: { uXrayMode: { value: number } },
+  jointDef?: JointAtlasDefinition
 ): THREE.MeshPhysicalMaterial {
   const common = {
     clippingPlanes: [clipPlane],
@@ -571,7 +583,19 @@ export function createTissueMaterial(
     side: THREE.DoubleSide,
   };
 
-  if (BONE_NAMES.has(name) || name === 'Patella') {
+  const isBone = jointDef
+    ? jointDef.boneNames.includes(name)
+    : BONE_NAMES.has(name) || name === 'Patella';
+  const isCartilage = jointDef
+    ? jointDef.cartilageNames.includes(name)
+    : CARTILAGE_NAMES.has(name);
+  const isFibro = jointDef
+    ? jointDef.fibrocartilageNames.includes(name)
+    : MENISCUS_NAMES.has(name);
+  const isNerveBursa = jointDef?.nerveBursaNames?.includes(name) ?? false;
+  const isLigament = jointDef?.ligamentNames.includes(name) ?? false;
+
+  if (isBone) {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
       color: 0xc2ab89,
@@ -596,7 +620,7 @@ export function createTissueMaterial(
     return mat;
   }
 
-  if (CARTILAGE_NAMES.has(name)) {
+  if (isCartilage) {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
       color: 0xbce0f5,
@@ -643,8 +667,11 @@ export function createTissueMaterial(
     return mat;
   }
 
-  if (MENISCUS_NAMES.has(name)) {
-    const hex = name === 'MedialMeniscus' ? 0x3b6e84 : 0x325b6e;
+  if (isFibro) {
+    const hex =
+      name === 'MedialMeniscus' || name === 'TFCC' || name === 'GlenoidLabrum'
+        ? 0x3b6e84
+        : 0x325b6e;
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
       color: hex,
@@ -660,6 +687,42 @@ export function createTissueMaterial(
     return mat;
   }
 
+  if (isNerveBursa) {
+    const isBursa = /bursa/i.test(name);
+    if (isBursa) {
+      const mat = new THREE.MeshPhysicalMaterial({
+        ...common,
+        color: 0x38bdf8,
+        roughness: 0.14,
+        metalness: 0.0,
+        clearcoat: 0.88,
+        clearcoatRoughness: 0.1,
+        transparent: true,
+        opacity: 0.52,
+        depthWrite: false,
+        envMapIntensity: 0.55,
+      });
+      mat.userData.baseColorHex = 0x38bdf8;
+      return mat;
+    }
+    const mat = new THREE.MeshPhysicalMaterial({
+      ...common,
+      color: 0xdcb45c,
+      map: bank.collagenAlbedo,
+      normalMap: bank.collagenNormal,
+      normalScale: new THREE.Vector2(0.32, 0.32),
+      roughness: 0.4,
+      metalness: 0.0,
+      clearcoat: 0.28,
+      clearcoatRoughness: 0.3,
+      sheen: 0.24,
+      sheenColor: new THREE.Color(0xfef3c7),
+      envMapIntensity: 0.35,
+    });
+    mat.userData.baseColorHex = 0xdcb45c;
+    return mat;
+  }
+
   // Ligaments & Tendons — striated silky collagen fascia
   const collagenTint =
     name === 'ACL'
@@ -668,7 +731,9 @@ export function createTissueMaterial(
         ? 0xcfbba0
         : name === 'MCL' || name === 'LCL'
           ? 0xd8d0c2
-          : 0xd8d1c4;
+          : isLigament
+            ? 0xd6cab3
+            : 0xd8d1c4;
 
   const mat = new THREE.MeshPhysicalMaterial({
     ...common,
@@ -761,6 +826,8 @@ export interface SpecimenSyncParams {
   chapterId: string;
   activeStructure: string;
   hoveredStructure: string | null;
+  jointDef?: JointAtlasDefinition;
+  extraDamagedStructures?: ReadonlySet<string>;
 }
 
 export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): void {
@@ -773,15 +840,18 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
     chapterId,
     activeStructure,
     hoveredStructure,
+    jointDef,
+    extraDamagedStructures,
   } = params;
 
   xrayUniform.uXrayMode.value = visibility.xrayBones ? 1.0 : 0.0;
 
-  const isBucket = chapterId === 'bucket-handle';
-  const isAclBad = chapterId === 'acl-rupture' || chapterId === 'unhappy-triad';
-  const isPclBad = chapterId === 'pcl-dashboard';
-  const isMclBad = chapterId === 'unhappy-triad';
-  const plateauOnly = Boolean(visibility.plateauDissection);
+  const isKnee = !jointDef || jointDef.id === 'knee';
+  const isBucket = isKnee && chapterId === 'bucket-handle';
+  const isAclBad = isKnee && (chapterId === 'acl-rupture' || chapterId === 'unhappy-triad');
+  const isPclBad = isKnee && chapterId === 'pcl-dashboard';
+  const isMclBad = isKnee && chapterId === 'unhappy-triad';
+  const plateauOnly = isKnee && Boolean(visibility.plateauDissection);
 
   for (const [name, mesh] of meshes) {
     const mat = materials.get(name);
@@ -793,15 +863,31 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
         : name;
     const structEnabled = enabledStructures ? enabledStructures.has(parentId) : true;
 
+    const isBone = jointDef
+      ? jointDef.boneNames.includes(name)
+      : BONE_NAMES.has(name) || name === 'Patella';
+    const isCartilage = jointDef
+      ? jointDef.cartilageNames.includes(name)
+      : CARTILAGE_NAMES.has(name) || name === 'PatellarCartilage';
+
     let shaderDirty = false;
-    if (BONE_NAMES.has(name) || name === 'Patella') {
+    if (!isKnee) {
+      mesh.visible = structEnabled;
+      if (isBone) {
+        shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
+      } else if (isCartilage) {
+        shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
+      } else if (jointDef?.xrayHiddenStructures?.includes(name)) {
+        shaderDirty = applyExtensorTendonState(mat, visibility.xrayBones && activeStructure !== name);
+      }
+    } else if (isBone) {
       const groupAllowed = name === 'Patella' && !enabledStructures ? visibility.extensor : visibility.bones;
       mesh.visible =
         structEnabled &&
         groupAllowed &&
         !(plateauOnly && (name === 'Femur' || name === 'Patella'));
       shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
-    } else if (CARTILAGE_NAMES.has(name) || name === 'PatellarCartilage') {
+    } else if (isCartilage) {
       const groupAllowed =
         name === 'PatellarCartilage' && !enabledStructures
           ? visibility.extensor && visibility.cartilage
@@ -838,16 +924,17 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
       (isBucket && name === 'BucketHandleFragment' && activeStructure === 'MedialMeniscus');
     const isHovered = name === hoveredStructure;
     const isPatho =
-      (name === 'BucketHandleFragment' && isBucket) ||
-      (name === 'ACL' && isAclBad) ||
-      (name === 'PCL' && isPclBad) ||
-      (name === 'MCL' && isMclBad);
+      Boolean(extraDamagedStructures?.has(name)) ||
+      (isKnee &&
+        ((name === 'BucketHandleFragment' && isBucket) ||
+          (name === 'ACL' && isAclBad) ||
+          (name === 'PCL' && isPclBad) ||
+          (name === 'MCL' && isMclBad)));
 
-    const isBone = BONE_NAMES.has(name) || name === 'Patella';
     if (isPatho) {
       mat.emissive.setHex(0x7f1d1d);
       mat.emissiveIntensity = isSelected ? 0.55 : 0.34;
-      if (name === 'ACL' && isAclBad && !mat.transparent) {
+      if (isKnee && name === 'ACL' && isAclBad && !mat.transparent) {
         mat.transparent = true;
         mat.opacity = 0.68;
         shaderDirty = true;
@@ -855,7 +942,7 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
     } else if (isSelected) {
       mat.emissive.setHex(0x0ea5e9);
       mat.emissiveIntensity = isBone ? 0.06 : 0.34;
-      if (name === 'ACL' && mat.transparent) {
+      if (isKnee && name === 'ACL' && mat.transparent) {
         mat.transparent = false;
         mat.opacity = 1.0;
         shaderDirty = true;
@@ -866,7 +953,7 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
     } else {
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 0;
-      if (name === 'ACL' && mat.transparent) {
+      if (isKnee && name === 'ACL' && mat.transparent) {
         mat.transparent = false;
         mat.opacity = 1.0;
         shaderDirty = true;

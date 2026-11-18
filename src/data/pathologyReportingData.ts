@@ -264,4 +264,68 @@ export const PATHOLOGY_REPORTING_DETAILS: Record<string, PathologyReportingDetai
     surgicalNote:
       'Contained focal Grade III–IV lesions without diffuse tricompartmental OA may qualify for microfracture, OATS, or MACI restoration.',
   },
+  'ramp-wrisberg': {
+    mechanism:
+      'Posteromedial meniscocapsular separation ("ramp lesion") develops from excessive tibial-femoral shear during acute ACL failure; similarly, Wrisberg rip tears pull a vertical longitudinal cleft where the meniscofemoral ligament anchors to the lateral posterior horn.',
+    sequencesAndPlanes: 'Fluid-Sensitive Sagittal Posteromedial + Coronal Intercondylar Notch',
+    gradingTitle: 'Thaunat Ramp Classification & Wrisberg Features',
+    grades: [
+      {
+        label: 'Type 1–2 Ramp',
+        detail: 'Meniscocapsular ligament fluid tear (Type 1) or partial superior cleft (Type 2).',
+      },
+      {
+        label: 'Type 3–4 Ramp',
+        detail: 'Hidden inferior meniscotibial tear (Type 3) or complete full-thickness separation (Type 4).',
+      },
+      {
+        label: 'Type 5 Double',
+        detail: 'Two parallel longitudinal tears along the posterior medial meniscocapsular periphery.',
+      },
+      {
+        label: 'Wrisberg Rip',
+        detail: 'Vertical tear extending along PHLM within <= 14 mm of PCL insertion in ACL injury.',
+      },
+    ],
+    howToReport: [
+      'Inspect the posteromedial meniscocapsular junction on every acute ACL tear for thin linear fluid.',
+      'Document any posteromedial tibial plateau marginal contrecoup marrow contusion.',
+      'Specify whether the tear reaches the inferior meniscotibial ligament or posterior horn.',
+      'Clear the posterolateral meniscus within 14 mm of Wrisberg insertion for longitudinal zip tears.',
+    ],
+    surgicalNote:
+      'Ramp lesions left unrepaired during ACL reconstruction significantly increase persistent rotatory laxity and graft overload; notify the surgeon to probe via posteromedial portal.',
+  },
+  'sifk-hoffa': {
+    mechanism:
+      'Acute mechanical overloading following medial root avulsion or meniscectomy fractures subchondral trabeculae (SIFK), while superolateral Hoffa fat pad impingement reflects chronic patellofemoral friction between patellar tendon and lateral femoral condyle.',
+    sequencesAndPlanes: 'Coronal & Sagittal Trabecular PD / Fluid-Sensitive + Axial Patellofemoral',
+    gradingTitle: 'SIFK Prognostic & Impingement Findings',
+    grades: [
+      {
+        label: 'Low-Signal Crescent',
+        detail: 'Thin curvilinear hypointense line parallel and < 3 mm deep to articular cortex.',
+      },
+      {
+        label: 'Disproportionate BML',
+        detail: 'Extensive trabecular edema extending across weight-bearing femoral condyle.',
+      },
+      {
+        label: 'Articular Collapse',
+        detail: 'Focal flattening or depression > 4 mm indicates irreversible subchondral collapse.',
+      },
+      {
+        label: 'SL Hoffa Edema',
+        detail: 'Bright fat pad fluid isolated between lateral patellar tendon & lateral condyle.',
+      },
+    ],
+    howToReport: [
+      'Differentiate linear subchondral SIFK fracture from geographic serpiginous double-line AVN.',
+      'Measure lesion width and note whether the articular cortical plate remains convex vs collapsed.',
+      'Explicitly state coexisting posterior medial meniscal root tear or > 3 mm radial extrusion.',
+      'In isolated superolateral Hoffa edema, measure Insall-Salvati (> 1.3 alta) and TT-TG distance.',
+    ],
+    surgicalNote:
+      'Pre-collapse SIFK responds to strict protected offloading; articular collapse > 4 mm or advanced tricompartmental OA often progresses to unicompartmental or total arthroplasty.',
+  },
 };

@@ -1,0 +1,567 @@
+{
+  "specimen": "wrist-carpus-3t",
+  "laterality": "Right",
+  "demographics": "In-Vivo 3.0T PD-FS Right Wrist & Carpus Atlas (18 Structures)",
+  "alignmentDetected": "RAS (x,y,z)",
+  "wlPresets": {
+    "pdfatsat-clinical": {
+      "min": 14,
+      "max": 228
+    },
+    "carpal-ligament": {
+      "min": 14,
+      "max": 192
+    },
+    "tfcc-chondral": {
+      "min": 20,
+      "max": 240
+    },
+    "marrow-avn": {
+      "min": 10,
+      "max": 166
+    }
+  },
+  "jointCenterRas": [
+    262,
+    18,
+    848
+  ],
+  "threeScale": 0.052,
+  "transepicondylarPivot": [
+    0,
+    0,
+    0
+  ],
+  "transepicondylarAxis": [
+    1,
+    0,
+    0
+  ],
+  "fatsatShape": [
+    144,
+    176,
+    176
+  ],
+  "fatsatRasBounds": {
+    "min": [
+      207,
+      -39,
+      791
+    ],
+    "max": [
+      317,
+      75,
+      905
+    ]
+  },
+  "structures": {
+    "Radius": {
+      "labelIndex": 1,
+      "centroidRas": [
+        270.092,
+        12.092,
+        876.3
+      ],
+      "centroidThree": [
+        -0.4208,
+        1.4716,
+        -0.3072
+      ],
+      "bboxThreeMin": [
+        -1.3045,
+        0.5536,
+        -1.0592
+      ],
+      "bboxThreeMax": [
+        0.2835,
+        2.496,
+        0.322
+      ],
+      "triangles": 682,
+      "segVoxels": 36118
+    },
+    "Ulna": {
+      "labelIndex": 2,
+      "centroidRas": [
+        244.123,
+        10.069,
+        880.052
+      ],
+      "centroidThree": [
+        0.9296,
+        1.6667,
+        -0.4124
+      ],
+      "bboxThreeMin": [
+        0.5109,
+        0.5656,
+        -0.8961
+      ],
+      "bboxThreeMax": [
+        1.3289,
+        2.496,
+        0.1161
+      ],
+      "triangles": 466,
+      "segVoxels": 10889
+    },
+    "Scaphoid": {
+      "labelIndex": 3,
+      "centroidRas": [
+        272.263,
+        18.027,
+        854.929
+      ],
+      "centroidThree": [
+        -0.5337,
+        0.3603,
+        0.0014
+      ],
+      "bboxThreeMin": [
+        -0.9457,
+        -0.0052,
+        -0.3371
+      ],
+      "bboxThreeMax": [
+        0.0888,
+        0.6833,
+        0.3408
+      ],
+      "triangles": 2432,
+      "segVoxels": 4203
+    },
+    "Lunate": {
+      "labelIndex": 4,
+      "centroidRas": [
+        253.638,
+        17.263,
+        853.846
+      ],
+      "centroidThree": [
+        0.4348,
+        0.304,
+        -0.0383
+      ],
+      "bboxThreeMin": [
+        0.1508,
+        0.0498,
+        -0.3878
+      ],
+      "bboxThreeMax": [
+        0.793,
+        0.5932,
+        0.3466
+      ],
+      "triangles": 3264,
+      "segVoxels": 3133
+    },
+    "Triquetrum": {
+      "labelIndex": 5,
+      "centroidRas": [
+        245.525,
+        21.36,
+        844.96
+      ],
+      "centroidThree": [
+        0.8567,
+        -0.1581,
+        0.1747
+      ],
+      "bboxThreeMin": [
+        0.6787,
+        -0.3653,
+        -0.1311
+      ],
+      "bboxThreeMax": [
+        1.0726,
+        0.1177,
+        0.4768
+      ],
+      "triangles": 1024,
+      "segVoxels": 1575
+    },
+    "Pisiform": {
+      "labelIndex": 6,
+      "centroidRas": [
+        244.006,
+        32.446,
+        845.9
+      ],
+      "centroidThree": [
+        0.9357,
+        -0.1092,
+        0.7512
+      ],
+      "bboxThreeMin": [
+        0.7749,
+        -0.3896,
+        0.5196
+      ],
+      "bboxThreeMax": [
+        1.1103,
+        0.1413,
+        0.9699
+      ],
+      "triangles": 2496,
+      "segVoxels": 1131
+    },
+    "DistalCarpalRow": {
+      "labelIndex": 7,
+      "centroidRas": [
+        268.185,
+        21.758,
+        842.54
+      ],
+      "centroidThree": [
+        -0.3216,
+        -0.2839,
+        0.1954
+      ],
+      "bboxThreeMin": [
+        -1.4475,
+        -0.8025,
+        -0.3733
+      ],
+      "bboxThreeMax": [
+        0.8563,
+        0.3768,
+        0.7763
+      ],
+      "triangles": 11776,
+      "segVoxels": 18598
+    },
+    "MetacarpalBases": {
+      "labelIndex": 8,
+      "centroidRas": [
+        275.287,
+        28.025,
+        820.956
+      ],
+      "centroidThree": [
+        -0.6909,
+        -1.4063,
+        0.5213
+      ],
+      "bboxThreeMin": [
+        -2.9562,
+        -2.496,
+        -0.2927
+      ],
+      "bboxThreeMax": [
+        1.317,
+        -0.0804,
+        1.8265
+      ],
+      "triangles": 3900,
+      "segVoxels": 41886
+    },
+    "RadiocarpalCartilage": {
+      "labelIndex": 9,
+      "centroidRas": [
+        271.692,
+        14.96,
+        863.379
+      ],
+      "centroidThree": [
+        -0.504,
+        0.7997,
+        -0.1581
+      ],
+      "bboxThreeMin": [
+        -1.3619,
+        0.4935,
+        -0.8004
+      ],
+      "bboxThreeMax": [
+        0.3315,
+        1.5356,
+        0.3738
+      ],
+      "triangles": 2248,
+      "segVoxels": 5152
+    },
+    "TFCC": {
+      "labelIndex": 10,
+      "centroidRas": [
+        249.692,
+        12.062,
+        856.944
+      ],
+      "centroidThree": [
+        0.64,
+        0.4651,
+        -0.3088
+      ],
+      "bboxThreeMin": [
+        0.253,
+        0.0486,
+        -0.4355
+      ],
+      "bboxThreeMax": [
+        1.054,
+        0.8876,
+        -0.0711
+      ],
+      "triangles": 696,
+      "segVoxels": 1703
+    },
+    "ScapholunateLigament": {
+      "labelIndex": 11,
+      "centroidRas": [
+        262.927,
+        17.415,
+        854.715
+      ],
+      "centroidThree": [
+        -0.0482,
+        0.3492,
+        -0.0304
+      ],
+      "bboxThreeMin": [
+        -0.3848,
+        0.1122,
+        -0.1218
+      ],
+      "bboxThreeMax": [
+        0.3139,
+        0.5553,
+        0.0388
+      ],
+      "triangles": 696,
+      "segVoxels": 673
+    },
+    "LunotriquetralLigament": {
+      "labelIndex": 12,
+      "centroidRas": [
+        249.242,
+        19.454,
+        849.415
+      ],
+      "centroidThree": [
+        0.6634,
+        0.0736,
+        0.0756
+      ],
+      "bboxThreeMin": [
+        0.4316,
+        -0.2153,
+        -0.0966
+      ],
+      "bboxThreeMax": [
+        0.9058,
+        0.3486,
+        0.2393
+      ],
+      "triangles": 696,
+      "segVoxels": 473
+    },
+    "FlexorTendons": {
+      "labelIndex": 13,
+      "centroidRas": [
+        264.487,
+        27.154,
+        847.987
+      ],
+      "centroidThree": [
+        -0.1293,
+        -0.0007,
+        0.476
+      ],
+      "bboxThreeMin": [
+        -0.7474,
+        -2.2981,
+        0.1756
+      ],
+      "bboxThreeMax": [
+        0.442,
+        2.2967,
+        0.7992
+      ],
+      "triangles": 2088,
+      "segVoxels": 16991
+    },
+    "FCR_FCU": {
+      "labelIndex": 14,
+      "centroidRas": [
+        258.998,
+        28.344,
+        855.66
+      ],
+      "centroidThree": [
+        0.1561,
+        0.3983,
+        0.5379
+      ],
+      "bboxThreeMin": [
+        -1.0512,
+        -1.789,
+        0.1963
+      ],
+      "bboxThreeMax": [
+        1.1569,
+        2.3057,
+        0.8448
+      ],
+      "triangles": 1392,
+      "segVoxels": 5942
+    },
+    "ECU_Tendon": {
+      "labelIndex": 15,
+      "centroidRas": [
+        241.462,
+        10.129,
+        854.654
+      ],
+      "centroidThree": [
+        1.068,
+        0.346,
+        -0.4093
+      ],
+      "bboxThreeMin": [
+        0.9165,
+        -1.5922,
+        -0.6955
+      ],
+      "bboxThreeMax": [
+        1.1907,
+        2.2926,
+        0.1192
+      ],
+      "triangles": 696,
+      "segVoxels": 4526
+    },
+    "EPL_Extensors": {
+      "labelIndex": 16,
+      "centroidRas": [
+        274.642,
+        12.906,
+        851.346
+      ],
+      "centroidThree": [
+        -0.6574,
+        0.174,
+        -0.2649
+      ],
+      "bboxThreeMin": [
+        -1.4619,
+        -2.2049,
+        -0.7409
+      ],
+      "bboxThreeMax": [
+        -0.039,
+        2.3224,
+        0.6236
+      ],
+      "triangles": 1392,
+      "segVoxels": 8714
+    },
+    "FlexorRetinaculum": {
+      "labelIndex": 17,
+      "centroidRas": [
+        264.521,
+        32.838,
+        844.223
+      ],
+      "centroidThree": [
+        -0.1311,
+        -0.1964,
+        0.7716
+      ],
+      "bboxThreeMin": [
+        -1.1501,
+        -0.5122,
+        0.6355
+      ],
+      "bboxThreeMax": [
+        0.9,
+        0.1478,
+        0.8649
+      ],
+      "triangles": 696,
+      "segVoxels": 2346
+    },
+    "MedianNerve": {
+      "labelIndex": 18,
+      "centroidRas": [
+        262.219,
+        30.463,
+        847.996
+      ],
+      "centroidThree": [
+        -0.0114,
+        -0.0002,
+        0.6481
+      ],
+      "bboxThreeMin": [
+        -0.1885,
+        -2.2919,
+        0.5087
+      ],
+      "bboxThreeMax": [
+        0.1365,
+        2.2901,
+        0.7913
+      ],
+      "triangles": 696,
+      "segVoxels": 2980
+    }
+  },
+  "guidePlateCoords": {
+    "cor-scapholunate.png": {
+      "sll": [
+        49,
+        46.9
+      ],
+      "capitate": [
+        46.9,
+        58.3
+      ]
+    },
+    "cor-tfcc.png": {
+      "tfcc": [
+        60.6,
+        48.9
+      ],
+      "fovea": [
+        62.1,
+        50
+      ]
+    },
+    "sag-disi-lunate.png": {
+      "lunate": [
+        50.8,
+        48.1
+      ],
+      "capitate": [
+        50,
+        58.3
+      ]
+    },
+    "cor-scaphoid-waist.png": {
+      "scaphoid": [
+        50,
+        46.9
+      ]
+    },
+    "ax-carpal-tunnel.png": {
+      "median": [
+        50,
+        41
+      ],
+      "fcr": [
+        37.2,
+        43.6
+      ]
+    },
+    "ax-ecu-dorsal.png": {
+      "ecu": [
+        69.1,
+        58.5
+      ],
+      "deq": [
+        16.3,
+        47.9
+      ]
+    }
+  }
+}

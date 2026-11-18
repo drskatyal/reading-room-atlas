@@ -1,4 +1,4 @@
-import type { KneeChapterId, KneeKinematics } from '../types/atlas';
+import type { JointId, KneeChapterId, KneeKinematics } from '../types/atlas';
 
 export type Vec3 = [number, number, number];
 
@@ -36,10 +36,31 @@ export function computeKneeKinematics(
   chapterId: KneeChapterId,
   threeScale = 0.04,
   laterality: 'Left' | 'Right' = 'Right',
-  patellaSubluxation = 0
+  patellaSubluxation = 0,
+  jointId: JointId = 'knee',
+  minDeg = 0,
+  maxDeg = 90
 ): KneeKinematics {
-  const clampedDeg = Math.max(0, Math.min(90, flexionDeg));
+  const clampedDeg = Math.max(minDeg, Math.min(maxDeg, flexionDeg));
   const flexionRad = (clampedDeg * Math.PI) / 180;
+
+  if (jointId !== 'knee') {
+    return {
+      flexionDeg: clampedDeg,
+      flexionRad,
+      screwHomeDeg: 0,
+      anteriorDrawerMm: 0,
+      anteriorTranslationThree: 0,
+      meniscalExtrusionMm: 0,
+      medialMeniscusShiftX: 0,
+      meniscusPosteriorShiftZ: 0,
+      patellaDropY: 0,
+      patellaShiftZ: 0,
+      patellaTiltRad: 0,
+      patellaLateralShiftX: 0,
+      patellaLateralTiltRad: 0,
+    };
+  }
 
   // Terminal extension locking ("screw-home"): ~11.5 deg tibial internal rotation during initial 0-25 deg flexion.
   const baseScrewHome = 11.5 * (1 - Math.exp(-clampedDeg / 14)) + 0.03 * clampedDeg;

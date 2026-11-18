@@ -1,0 +1,716 @@
+{
+  "specimen": "ankle-hindfoot-3t",
+  "laterality": "Right",
+  "demographics": "In-Vivo 3.0T PD-FS Right Ankle & Hindfoot Atlas (23 Dissected Structures)",
+  "alignmentDetected": "RAS (x,y,z)",
+  "wlPresets": {
+    "pdfatsat-clinical": {
+      "min": 14,
+      "max": 228
+    },
+    "ligament-tendon": {
+      "min": 12,
+      "max": 185
+    },
+    "chondral-ocd": {
+      "min": 22,
+      "max": 242
+    },
+    "marrow-edema": {
+      "min": 10,
+      "max": 168
+    }
+  },
+  "jointCenterRas": [
+    80,
+    -38,
+    68
+  ],
+  "threeScale": 0.036,
+  "transepicondylarPivot": [
+    0,
+    0,
+    0
+  ],
+  "transepicondylarAxis": [
+    1,
+    0,
+    0
+  ],
+  "fatsatShape": [
+    144,
+    176,
+    176
+  ],
+  "fatsatRasBounds": {
+    "min": [
+      14,
+      -122,
+      -16
+    ],
+    "max": [
+      146,
+      46,
+      152
+    ]
+  },
+  "structures": {
+    "Tibia": {
+      "labelIndex": 1,
+      "centroidRas": [
+        73.367,
+        -36.681,
+        107.589
+      ],
+      "centroidThree": [
+        0.2388,
+        1.4252,
+        0.0475
+      ],
+      "bboxThreeMin": [
+        -0.621,
+        0.3881,
+        -0.7494
+      ],
+      "bboxThreeMax": [
+        1.1756,
+        2.88,
+        0.6745
+      ],
+      "triangles": 1072,
+      "segVoxels": 71633
+    },
+    "Fibula": {
+      "labelIndex": 2,
+      "centroidRas": [
+        99.567,
+        -48.269,
+        94.728
+      ],
+      "centroidThree": [
+        -0.7044,
+        0.9622,
+        -0.3697
+      ],
+      "bboxThreeMin": [
+        -0.9935,
+        -0.4166,
+        -0.7364
+      ],
+      "bboxThreeMax": [
+        -0.3572,
+        2.88,
+        0.1043
+      ],
+      "triangles": 916,
+      "segVoxels": 19479
+    },
+    "Talus": {
+      "labelIndex": 3,
+      "centroidRas": [
+        72.792,
+        -35.444,
+        66.347
+      ],
+      "centroidThree": [
+        0.2595,
+        -0.0595,
+        0.092
+      ],
+      "bboxThreeMin": [
+        -0.5222,
+        -0.5094,
+        -0.9341
+      ],
+      "bboxThreeMax": [
+        0.9027,
+        0.5499,
+        1.0351
+      ],
+      "triangles": 2144,
+      "segVoxels": 35385
+    },
+    "Calcaneus": {
+      "labelIndex": 4,
+      "centroidRas": [
+        79.053,
+        -50.911,
+        41.206
+      ],
+      "centroidThree": [
+        0.0341,
+        -0.9646,
+        -0.4648
+      ],
+      "bboxThreeMin": [
+        -0.7545,
+        -1.976,
+        -1.8216
+      ],
+      "bboxThreeMax": [
+        0.8616,
+        -0.2755,
+        0.7318
+      ],
+      "triangles": 2304,
+      "segVoxels": 66513
+    },
+    "Navicular": {
+      "labelIndex": 5,
+      "centroidRas": [
+        73.256,
+        -3.939,
+        62.253
+      ],
+      "centroidThree": [
+        0.2428,
+        -0.2069,
+        1.2262
+      ],
+      "bboxThreeMin": [
+        -0.4238,
+        -0.6132,
+        0.912
+      ],
+      "bboxThreeMax": [
+        0.9283,
+        0.235,
+        1.6081
+      ],
+      "triangles": 4608,
+      "segVoxels": 9080
+    },
+    "Cuboid": {
+      "labelIndex": 6,
+      "centroidRas": [
+        95.717,
+        -8.494,
+        42.392
+      ],
+      "centroidThree": [
+        -0.5658,
+        -0.9219,
+        1.0622
+      ],
+      "bboxThreeMin": [
+        -1.1126,
+        -1.3635,
+        0.5614
+      ],
+      "bboxThreeMax": [
+        -0.0341,
+        -0.363,
+        1.6696
+      ],
+      "triangles": 1568,
+      "segVoxels": 14570
+    },
+    "Cuneiforms": {
+      "labelIndex": 7,
+      "centroidRas": [
+        79.664,
+        12.342,
+        53.025
+      ],
+      "centroidThree": [
+        0.0121,
+        -0.5391,
+        1.8123
+      ],
+      "bboxThreeMin": [
+        -0.8545,
+        -1.1371,
+        1.2021
+      ],
+      "bboxThreeMax": [
+        0.7466,
+        0.0232,
+        2.4856
+      ],
+      "triangles": 3264,
+      "segVoxels": 18131
+    },
+    "TibiotalarCartilage": {
+      "labelIndex": 8,
+      "centroidRas": [
+        68.794,
+        -38.311,
+        85.356
+      ],
+      "centroidThree": [
+        0.4034,
+        0.6248,
+        -0.0112
+      ],
+      "bboxThreeMin": [
+        -0.5813,
+        0.3295,
+        -0.7911
+      ],
+      "bboxThreeMax": [
+        1.2146,
+        0.9793,
+        0.6651
+      ],
+      "triangles": 3216,
+      "segVoxels": 6103
+    },
+    "TalarDomeCartilage": {
+      "labelIndex": 9,
+      "centroidRas": [
+        73.458,
+        -34.258,
+        78.528
+      ],
+      "centroidThree": [
+        0.2355,
+        0.379,
+        0.1347
+      ],
+      "bboxThreeMin": [
+        -0.4688,
+        0.0408,
+        -0.7203
+      ],
+      "bboxThreeMax": [
+        0.9363,
+        0.6115,
+        0.8468
+      ],
+      "triangles": 3784,
+      "segVoxels": 4668
+    },
+    "SubtalarCartilage": {
+      "labelIndex": 10,
+      "centroidRas": [
+        72.692,
+        -37.95,
+        59.758
+      ],
+      "centroidThree": [
+        0.2631,
+        -0.2967,
+        0.0018
+      ],
+      "bboxThreeMin": [
+        -0.5738,
+        -0.5625,
+        -0.9801
+      ],
+      "bboxThreeMax": [
+        0.9465,
+        0.0258,
+        0.9696
+      ],
+      "triangles": 8144,
+      "segVoxels": 6243
+    },
+    "SpringLigament": {
+      "labelIndex": 11,
+      "centroidRas": [
+        56.228,
+        -19.783,
+        54.444
+      ],
+      "centroidThree": [
+        0.8558,
+        -0.488,
+        0.6558
+      ],
+      "bboxThreeMin": [
+        0.63,
+        -0.7963,
+        0.0988
+      ],
+      "bboxThreeMax": [
+        1.0059,
+        -0.1234,
+        1.1975
+      ],
+      "triangles": 696,
+      "segVoxels": 1595
+    },
+    "ATFL": {
+      "labelIndex": 12,
+      "centroidRas": [
+        93.939,
+        -29.208,
+        62.425
+      ],
+      "centroidThree": [
+        -0.5018,
+        -0.2007,
+        0.3165
+      ],
+      "bboxThreeMin": [
+        -0.8583,
+        -0.478,
+        -0.3193
+      ],
+      "bboxThreeMax": [
+        -0.0911,
+        0.0707,
+        0.9267
+      ],
+      "triangles": 696,
+      "segVoxels": 1187
+    },
+    "CFL": {
+      "labelIndex": 13,
+      "centroidRas": [
+        102.867,
+        -50.5,
+        48.2
+      ],
+      "centroidThree": [
+        -0.8232,
+        -0.7128,
+        -0.45
+      ],
+      "bboxThreeMin": [
+        -0.9644,
+        -1.0466,
+        -0.5873
+      ],
+      "bboxThreeMax": [
+        -0.6331,
+        -0.3893,
+        -0.3142
+      ],
+      "triangles": 696,
+      "segVoxels": 341
+    },
+    "PTFL": {
+      "labelIndex": 14,
+      "centroidRas": [
+        88.128,
+        -59.433,
+        60.061
+      ],
+      "centroidThree": [
+        -0.2926,
+        -0.2858,
+        -0.7716
+      ],
+      "bboxThreeMin": [
+        -0.8686,
+        -0.5114,
+        -1.002
+      ],
+      "bboxThreeMax": [
+        0.2833,
+        -0.0601,
+        -0.5413
+      ],
+      "triangles": 696,
+      "segVoxels": 1003
+    },
+    "AITFL": {
+      "labelIndex": 15,
+      "centroidRas": [
+        95.792,
+        -33.133,
+        91.206
+      ],
+      "centroidThree": [
+        -0.5685,
+        0.8354,
+        0.1752
+      ],
+      "bboxThreeMin": [
+        -0.7264,
+        0.5961,
+        -0.0699
+      ],
+      "bboxThreeMax": [
+        -0.4398,
+        1.0728,
+        0.4077
+      ],
+      "triangles": 696,
+      "segVoxels": 523
+    },
+    "DeltoidLigament": {
+      "labelIndex": 16,
+      "centroidRas": [
+        52.481,
+        -32.869,
+        70.944
+      ],
+      "centroidThree": [
+        0.9907,
+        0.106,
+        0.1847
+      ],
+      "bboxThreeMin": [
+        0.6369,
+        -0.4873,
+        -0.4839
+      ],
+      "bboxThreeMax": [
+        1.3946,
+        0.5933,
+        1.2296
+      ],
+      "triangles": 2088,
+      "segVoxels": 3635
+    },
+    "PlantarFascia": {
+      "labelIndex": 17,
+      "centroidRas": [
+        75.339,
+        -20.414,
+        19.222
+      ],
+      "centroidThree": [
+        0.1678,
+        -1.756,
+        0.6331
+      ],
+      "bboxThreeMin": [
+        -0.3092,
+        -2.0762,
+        -1.314
+      ],
+      "bboxThreeMax": [
+        0.8225,
+        -1.584,
+        2.5654
+      ],
+      "triangles": 696,
+      "segVoxels": 9047
+    },
+    "AchillesTendon": {
+      "labelIndex": 18,
+      "centroidRas": [
+        78.031,
+        -86.053,
+        95.5
+      ],
+      "centroidThree": [
+        0.0709,
+        0.99,
+        -1.7299
+      ],
+      "bboxThreeMin": [
+        -0.3163,
+        -0.7254,
+        -2.0819
+      ],
+      "bboxThreeMax": [
+        0.4389,
+        2.7071,
+        -1.1516
+      ],
+      "triangles": 696,
+      "segVoxels": 13315
+    },
+    "PosteriorTibialTendon": {
+      "labelIndex": 19,
+      "centroidRas": [
+        49.036,
+        -35.939,
+        87.089
+      ],
+      "centroidThree": [
+        1.1147,
+        0.6872,
+        0.0742
+      ],
+      "bboxThreeMin": [
+        0.7751,
+        -0.5958,
+        -0.3119
+      ],
+      "bboxThreeMax": [
+        1.3379,
+        2.523,
+        1.1632
+      ],
+      "triangles": 696,
+      "segVoxels": 4381
+    },
+    "FHLTendon": {
+      "labelIndex": 20,
+      "centroidRas": [
+        61.717,
+        -49.444,
+        74.622
+      ],
+      "centroidThree": [
+        0.6582,
+        0.2384,
+        -0.412
+      ],
+      "bboxThreeMin": [
+        0.3337,
+        -1.4522,
+        -1.1361
+      ],
+      "bboxThreeMax": [
+        0.905,
+        2.5346,
+        1.2787
+      ],
+      "triangles": 696,
+      "segVoxels": 4807
+    },
+    "PeroneusBrevis": {
+      "labelIndex": 21,
+      "centroidRas": [
+        104.65,
+        -45.211,
+        68.008
+      ],
+      "centroidThree": [
+        -0.8874,
+        0.0003,
+        -0.2596
+      ],
+      "bboxThreeMin": [
+        -1.388,
+        -1.711,
+        -0.8868
+      ],
+      "bboxThreeMax": [
+        -0.6538,
+        2.4518,
+        1.4835
+      ],
+      "triangles": 696,
+      "segVoxels": 4322
+    },
+    "PeroneusLongus": {
+      "labelIndex": 22,
+      "centroidRas": [
+        100.761,
+        -42.206,
+        64.083
+      ],
+      "centroidThree": [
+        -0.7474,
+        -0.141,
+        -0.1514
+      ],
+      "bboxThreeMin": [
+        -1.011,
+        -1.5117,
+        -1.0164
+      ],
+      "bboxThreeMax": [
+        0.2803,
+        2.4521,
+        1.7313
+      ],
+      "triangles": 696,
+      "segVoxels": 4626
+    },
+    "TibialNerve": {
+      "labelIndex": 23,
+      "centroidRas": [
+        52.719,
+        -45.756,
+        76.464
+      ],
+      "centroidThree": [
+        0.9821,
+        0.3047,
+        -0.2792
+      ],
+      "bboxThreeMin": [
+        0.4345,
+        -1.5083,
+        -0.8673
+      ],
+      "bboxThreeMax": [
+        1.4096,
+        2.5459,
+        0.8364
+      ],
+      "triangles": 696,
+      "segVoxels": 2703
+    }
+  },
+  "guidePlateCoords": {
+    "ax-atfl-mortise.png": {
+      "atflMid": [
+        39.1,
+        43
+      ],
+      "ptfl": [
+        30.5,
+        64.2
+      ]
+    },
+    "ax-syndesmosis.png": {
+      "aitfl": [
+        38.2,
+        45.3
+      ],
+      "incisura": [
+        37.6,
+        43.3
+      ]
+    },
+    "cor-deltoid-spring.png": {
+      "deltoid": [
+        70.2,
+        50.5
+      ],
+      "talarMed": [
+        69.5,
+        39.1
+      ]
+    },
+    "cor-talar-dome.png": {
+      "medDome": [
+        58.1,
+        45.2
+      ],
+      "latDome": [
+        41.9,
+        45.2
+      ]
+    },
+    "sag-achilles-haglund.png": {
+      "achillesIns": [
+        77.7,
+        68
+      ],
+      "haglund": [
+        72.2,
+        56.9
+      ]
+    },
+    "ax-medial-tunnels.png": {
+      "ptt": [
+        73.8,
+        53
+      ],
+      "fhl": [
+        61.3,
+        62.9
+      ],
+      "nerve": [
+        77,
+        56.3
+      ]
+    },
+    "ax-peroneals.png": {
+      "peron": [
+        30,
+        66.7
+      ]
+    },
+    "sag-plantar-sinus.png": {
+      "plantar": [
+        56.8,
+        74.3
+      ],
+      "sinus": [
+        47.3,
+        47.3
+      ]
+    }
+  }
+}

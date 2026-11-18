@@ -15,21 +15,22 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
-  BONE_NAMES,
   applyBoneOsteologyShading,
   createAnatomyTextureBank,
   createStudioVignetteTexture,
   createTissueMaterial,
   syncSpecimenMaterialsAndVisibility,
+  type AnatomyTextureBank,
 } from '../core/anatomyMaterials';
 import { rasToThree } from '../core/coordinates';
 import {
+  createDeclarativePathologySystem,
   createPathologyOverlaySystem,
   type PathologyOverlaySystem,
 } from '../core/pathologyMeshes';
-import { STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
   CameraPresetKey,
+  JointAtlasDefinition,
   KneeKinematics,
   KneeLandmarks,
   KneeModuleId,
@@ -42,6 +43,7 @@ import type {
 } from '../types/atlas';
 
 interface KneeSpecimen3DProps {
+  jointDef: JointAtlasDefinition;
   landmarks: KneeLandmarks | null;
   moduleId: KneeModuleId;
   subStepId: string;
@@ -74,35 +76,26 @@ interface KneeSpecimen3DProps {
   onQuizStructureClick?: (id: StructureId) => void;
 }
 
-const CAMERA_PRESETS: Record<
-  CameraPresetKey,
-  { label: string; pos: [number, number, number]; target: [number, number, number] }
-> = {
-  anterior: { label: 'Anterior', pos: [0.22, 0.55, 8.5], target: [0.0, 0.18, 0.15] },
-  medial: { label: 'Medial', pos: [8.1, 0.45, 1.85], target: [0.15, 0.15, 0.12] },
-  lateral: { label: 'Lateral', pos: [-8.1, 0.45, 1.65], target: [-0.15, 0.15, 0.08] },
-  posterior: { label: 'Posterior', pos: [-0.2, 0.65, -8.3], target: [0.0, 0.12, -0.05] },
-  notch: { label: 'Notch', pos: [0.16, -0.42, 6.75], target: [0.0, 0.16, 0.08] },
-  plateau: { label: 'Plateau Top', pos: [0.12, 7.65, 2.85], target: [0.1, -0.16, 0.06] },
-};
-
 function computeFramedCamera(
+  jointDef: JointAtlasDefinition,
   presetKey: CameraPresetKey,
   distanceScale: number,
   moduleId: KneeModuleId,
   activeStructure: StructureId,
   container: HTMLDivElement | null
 ): { pos: THREE.Vector3; target: THREE.Vector3 } {
-  const preset = CAMERA_PRESETS[presetKey] ?? CAMERA_PRESETS.anterior;
+  const presets = jointDef.cameraPresets;
+  const preset = presets[presetKey] ?? presets.anterior;
   const target = new THREE.Vector3(...preset.target);
   const basePos = new THREE.Vector3(...preset.pos);
 
-  // When focusing patellar dislocation or extensor structures, elevate framing to patellofemoral zone
+  // When focusing knee patellar dislocation or extensor structures, elevate framing to patellofemoral zone
   if (
-    moduleId === 'patellar-dislocation' ||
-    activeStructure === 'Patella' ||
-    activeStructure === 'PatellarCartilage' ||
-    activeStructure === 'QuadricepsTendon'
+    jointDef.id === 'knee' &&
+    (moduleId === 'patellar-dislocation' ||
+      activeStructure === 'Patella' ||
+      activeStructure === 'PatellarCartilage' ||
+      activeStructure === 'QuadricepsTendon')
   ) {
     if (presetKey === 'medial') {
       target.set(0.25, 1.08, 0.9);
@@ -126,26 +119,8 @@ function computeFramedCamera(
   return { pos: target.clone().add(offset), target };
 }
 
-const ALL_PIN_STRUCTURES: StructureId[] = [
-  'Femur',
-  'Tibia',
-  'Patella',
-  'MedialMeniscus',
-  'LateralMeniscus',
-  'ACL',
-  'PCL',
-  'MCL',
-];
-
-const VIEW_MODES: Array<{ id: SpecimenViewMode; label: string }> = [
-  { id: 'solid', label: 'Solid' },
-  { id: 'joint-interior', label: 'X-Ray Bone' },
-  { id: 'plateau-topdown', label: 'Plateau Top' },
-  { id: 'cartilage-map', label: 'Cartilage mm' },
-];
-
-function isStructureId(val: string): val is StructureId {
-  return val in STRUCTURES_INFO;
+function isStructureId(val: string, jointDef: JointAtlasDefinition): val is StructureId {
+  return val in jointDef.structuresInfo;
 }
 
 function getEffectiveVisibility(
@@ -172,6 +147,7 @@ function getEffectiveVisibility(
 }
 
 export function KneeSpecimen3D({
+  jointDef,
   landmarks,
   moduleId,
   subStepId,
@@ -211,10 +187,24 @@ export function KneeSpecimen3D({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modelReady, setModelReady] = useState(false);
 
+  const viewModes = useMemo<Array<{ id: SpecimenViewMode; label: string }>>(() => {
+    const base: Array<{ id: SpecimenViewMode; label: string }> = [
+      { id: 'solid', label: 'Solid' },
+      { id: 'joint-interior', label: 'X-Ray Bone' },
+    ];
+    if (jointDef.supportsPlateauView) {
+      base.push({ id: 'plateau-topdown', label: 'Plateau Top' });
+    }
+    if (jointDef.supportsCartilageMap) {
+      base.push({ id: 'cartilage-map', label: 'Cartilage mm' });
+    }
+    return base;
+  }, [jointDef.supportsPlateauView, jointDef.supportsCartilageMap]);
+
   const focusedLabel = useMemo(() => {
     if (targetBadge) return targetBadge;
-    return STRUCTURES_INFO[activeStructure]?.shortLabel ?? activeStructure;
-  }, [targetBadge, activeStructure]);
+    return jointDef.structuresInfo[activeStructure]?.shortLabel ?? activeStructure;
+  }, [targetBadge, activeStructure, jointDef.structuresInfo]);
 
   const focusedLabelRef = useRef(focusedLabel);
   focusedLabelRef.current = focusedLabel;
@@ -229,6 +219,7 @@ export function KneeSpecimen3D({
 
   // Latest props ref for rAF loop (zero React re-renders during drag/orbit)
   const stateRef = useRef({
+    jointDef,
     moduleId,
     subStepId,
     meniscalTearMorphology,
@@ -247,6 +238,7 @@ export function KneeSpecimen3D({
     landmarks,
   });
   stateRef.current = {
+    jointDef,
     moduleId,
     subStepId,
     meniscalTearMorphology,
@@ -275,6 +267,8 @@ export function KneeSpecimen3D({
     meshes: Map<string, THREE.Mesh>;
     materials: Map<string, THREE.MeshPhysicalMaterial>;
     xrayUniform: { uXrayMode: { value: number } };
+    clipPlane: THREE.Plane;
+    textureBank: AnatomyTextureBank;
     femurGroup: THREE.Group;
     tibiaPivotGroup: THREE.Group;
     tibiaTranslationGroup: THREE.Group;
@@ -283,7 +277,8 @@ export function KneeSpecimen3D({
     medialMeniscusGroup: THREE.Group;
     patellaGroup: THREE.Group;
     focusedTargetAnchor: THREE.Object3D;
-    pathologySystem: PathologyOverlaySystem | null;
+    kneePathologySystem: PathologyOverlaySystem | null;
+    declarativePathologySystem: PathologyOverlaySystem | null;
     slicePlaneMesh: THREE.Mesh;
     sliceOutline: THREE.LineLoop;
     vignetteMat: THREE.MeshBasicMaterial;
@@ -295,6 +290,7 @@ export function KneeSpecimen3D({
     tibiaPivotVec: THREE.Vector3;
     tibiaPivotAxis: THREE.Vector3;
     patellaCenterVec: THREE.Vector3;
+    loadGen: number;
   } | null>(null);
 
   // Close layers popover on outside click
@@ -470,6 +466,8 @@ export function KneeSpecimen3D({
       meshes,
       materials,
       xrayUniform,
+      clipPlane,
+      textureBank,
       femurGroup,
       tibiaPivotGroup,
       tibiaTranslationGroup,
@@ -478,7 +476,8 @@ export function KneeSpecimen3D({
       medialMeniscusGroup,
       patellaGroup,
       focusedTargetAnchor,
-      pathologySystem: null as PathologyOverlaySystem | null,
+      kneePathologySystem: null as PathologyOverlaySystem | null,
+      declarativePathologySystem: null as PathologyOverlaySystem | null,
       slicePlaneMesh,
       sliceOutline,
       vignetteMat,
@@ -490,111 +489,9 @@ export function KneeSpecimen3D({
       tibiaPivotVec: new THREE.Vector3(0, 0.2, 0.1),
       tibiaPivotAxis: new THREE.Vector3(1, 0, 0),
       patellaCenterVec: new THREE.Vector3(-0.44, 1.47, 1.97),
+      loadGen: 0,
     };
     sceneRefs.current = refs;
-
-    const draco = new DRACOLoader();
-    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-    const loader = new GLTFLoader();
-    loader.setDRACOLoader(draco);
-
-    let disposed = false;
-    loader.load(
-      '/models/knee-invivo-3t.glb',
-      (gltf) => {
-        if (disposed) return;
-
-        const lm = stateRef.current.landmarks;
-        const pivotArr = lm?.transepicondylarPivot ?? [0.06, 0.28, 0.1];
-        const axisArr = lm?.transepicondylarAxis ?? [1, 0, 0];
-        refs.tibiaPivotVec.set(pivotArr[0], pivotArr[1], pivotArr[2]);
-        refs.tibiaPivotAxis.set(axisArr[0], axisArr[1], axisArr[2]).normalize();
-        // Ensure positive flexion always rotates distal tibia (-Y) posteriorly (-Z)
-        if (refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
-
-        tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
-        tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
-
-        const collected: Array<{ name: string; mesh: THREE.Mesh }> = [];
-        gltf.scene.traverse((obj) => {
-          if (obj instanceof THREE.Mesh) {
-            obj.geometry.computeVertexNormals();
-            obj.geometry.computeBoundingBox();
-            collected.push({ name: obj.name, mesh: obj });
-          }
-        });
-
-        for (const { name, mesh } of collected) {
-          if (BONE_NAMES.has(name) || name === 'Patella') {
-            applyBoneOsteologyShading(mesh.geometry, name);
-          }
-          const mat = createTissueMaterial(name, clipPlane, textureBank, xrayUniform);
-          mesh.material = mat;
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          mesh.userData.structureName = name;
-
-          meshes.set(name, mesh);
-          materials.set(name, mat);
-
-          if (name === 'Femur' || name === 'FemoralCartilage') {
-            femurGroup.add(mesh);
-          } else if (
-            name === 'Patella' ||
-            name === 'PatellarCartilage' ||
-            name === 'PatellarTendon' ||
-            name === 'QuadricepsTendon'
-          ) {
-            patellaGroup.add(mesh);
-          } else if (
-            name === 'MedialMeniscus' ||
-            name === 'MedialMeniscusTruncated' ||
-            name === 'BucketHandleFragment'
-          ) {
-            if (name === 'BucketHandleFragment') {
-              // Anchor displaced bucket-handle inside notch alongside PCL
-              tibiaBodyGroup.add(mesh);
-            } else {
-              medialMeniscusGroup.add(mesh);
-            }
-          } else {
-            tibiaBodyGroup.add(mesh);
-          }
-        }
-
-        const patMesh = meshes.get('Patella');
-        if (patMesh) {
-          patMesh.geometry.computeBoundingBox();
-          const pBox = patMesh.geometry.boundingBox;
-          if (pBox) pBox.getCenter(refs.patellaCenterVec);
-        }
-
-        refs.pathologySystem = createPathologyOverlaySystem({
-          femurGroup,
-          tibiaBodyGroup,
-          medialMeniscusGroup,
-          patellaGroup,
-          meshes,
-          threeScale: lm?.threeScale ?? 0.04,
-          laterality: lm?.laterality ?? 'Right',
-        });
-
-        setModelReady(true);
-        setLoadProgress(100);
-        dirtyShadow();
-        wake(60);
-      },
-      (evt) => {
-        if (evt.total > 0) {
-          setLoadProgress(Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
-        }
-      },
-      () => {
-        if (!disposed) {
-          setLoadError('Unable to load /models/knee-invivo-3t.glb specimen meshes.');
-        }
-      }
-    );
 
     // Hover & Click / Double-click raycasting
     const raycaster = new THREE.Raycaster();
@@ -610,13 +507,14 @@ export function KneeSpecimen3D({
       raycaster.setFromCamera(pointerNdc, camera);
       const visibleTargets = Array.from(meshes.values()).filter((m) => m.visible);
       const hits = raycaster.intersectObjects(visibleTargets, false);
+      const jDef = stateRef.current.jointDef;
       for (const hit of hits) {
         const raw = hit.object.userData.structureName as string;
         const mapped =
           raw === 'BucketHandleFragment' || raw === 'MedialMeniscusTruncated'
             ? 'MedialMeniscus'
             : raw;
-        if (isStructureId(mapped)) {
+        if (isStructureId(mapped, jDef)) {
           return { id: mapped, point: hit.point };
         }
       }
@@ -686,7 +584,7 @@ export function KneeSpecimen3D({
         refs.animTargetPos = hit.point.clone().addScaledVector(dir, nextDist);
         callbacksRef.current.onSelectStructure(hit.id);
       } else {
-        const preset = CAMERA_PRESETS.anterior;
+        const preset = stateRef.current.jointDef.cameraPresets.anterior;
         refs.animTargetPos = new THREE.Vector3(...preset.pos);
         refs.animTargetLook = new THREE.Vector3(...preset.target);
       }
@@ -724,27 +622,16 @@ export function KneeSpecimen3D({
         if (allLayerEl) allLayerEl.style.display = 'none';
 
         const focusStruct = s.activeStructure;
+        const kCfg = s.jointDef.kinematicConfig;
         let anchorParent: THREE.Group = femurGroup;
-        if (
-          focusStruct === 'Patella' ||
-          focusStruct === 'PatellarCartilage' ||
-          focusStruct === 'PatellarTendon' ||
-          focusStruct === 'QuadricepsTendon'
-        ) {
+        if (kCfg.patellaStructures?.includes(focusStruct)) {
           anchorParent = patellaGroup;
-        } else if (focusStruct === 'MedialMeniscus') {
-          anchorParent = medialMeniscusGroup;
         } else if (
-          focusStruct === 'Tibia' ||
-          focusStruct === 'Fibula' ||
-          focusStruct === 'LateralMeniscus' ||
-          focusStruct === 'MedialTibialCartilage' ||
-          focusStruct === 'LateralTibialCartilage' ||
-          focusStruct === 'ACL' ||
-          focusStruct === 'PCL' ||
-          focusStruct === 'MCL' ||
-          focusStruct === 'LCL'
+          kCfg.medialMeniscusStructures?.includes(focusStruct) &&
+          !(s.jointDef.id === 'knee' && s.moduleId === 'bucket-handle')
         ) {
+          anchorParent = medialMeniscusGroup;
+        } else if (kCfg.movingStructures.includes(focusStruct)) {
           anchorParent = tibiaBodyGroup;
         }
 
@@ -812,7 +699,7 @@ export function KneeSpecimen3D({
 
       if (s.showAllLabels && allLayerEl) {
         allLayerEl.style.display = 'block';
-        for (const sid of ALL_PIN_STRUCTURES) {
+        for (const sid of s.jointDef.allPinStructures) {
           const btn = pinButtonsRef.current.get(sid);
           if (!btn) continue;
           const m = refs.meshes.get(sid);
@@ -857,6 +744,7 @@ export function KneeSpecimen3D({
     // Animation Loop with smart idle sleep + zero-lag OrbitControls wake
     const clock = new THREE.Clock();
     let frameHandle = 0;
+    let disposed = false;
 
     const animate = () => {
       if (disposed) return;
@@ -915,6 +803,18 @@ export function KneeSpecimen3D({
 
       // 3. Update Materials & Pathology Overlays
       const effVis = getEffectiveVisibility(s.visibility, s.viewMode, s.moduleId);
+      let extraDamaged: Set<string> | undefined;
+      for (const spec of s.jointDef.pathology3DSpecs) {
+        if (
+          spec.moduleId === s.moduleId &&
+          (!spec.subStepId || spec.subStepId === s.subStepId) &&
+          spec.damagedStructures?.length
+        ) {
+          extraDamaged = extraDamaged ?? new Set<string>();
+          for (const ds of spec.damagedStructures) extraDamaged.add(ds);
+        }
+      }
+
       syncSpecimenMaterialsAndVisibility({
         meshes: refs.meshes,
         materials: refs.materials,
@@ -924,18 +824,20 @@ export function KneeSpecimen3D({
         chapterId: s.moduleId,
         activeStructure: s.activeStructure,
         hoveredStructure: hoveredStructureRef.current,
+        jointDef: s.jointDef,
+        extraDamagedStructures: extraDamaged,
       });
 
-      if (refs.pathologySystem) {
-        refs.pathologySystem.update({
-          moduleId: s.moduleId,
-          subStepId: s.subStepId,
-          meniscalTearMorphology: s.meniscalTearMorphology,
-          kinematics: kin,
-          visibility: s.visibility,
-          elapsedSec,
-        });
-      }
+      const pState = {
+        moduleId: s.moduleId,
+        subStepId: s.subStepId,
+        meniscalTearMorphology: s.meniscalTearMorphology,
+        kinematics: kin,
+        visibility: s.visibility,
+        elapsedSec,
+      };
+      refs.kneePathologySystem?.update(pState);
+      refs.declarativePathologySystem?.update(pState);
 
       // 4. Update MRI Slice Reference Frame in 3D
       if (s.showSlicePlane && s.landmarks) {
@@ -978,7 +880,11 @@ export function KneeSpecimen3D({
       renderer.domElement.removeEventListener('wheel', onWheel);
       renderer.domElement.removeEventListener('dblclick', onDoubleClick);
 
-      refs.pathologySystem?.dispose();
+      refs.kneePathologySystem?.dispose();
+      refs.declarativePathologySystem?.dispose();
+      for (const mesh of meshes.values()) {
+        mesh.geometry.dispose();
+      }
       for (const m of materials.values()) m.dispose();
       slicePlaneGeo.dispose();
       slicePlaneMat.dispose();
@@ -997,6 +903,157 @@ export function KneeSpecimen3D({
       sceneRefs.current = null;
     };
   }, []);
+
+  // Load Joint Specimen GLB into persistent Three.js WebGL context
+  useEffect(() => {
+    const refs = sceneRefs.current;
+    if (!refs) return;
+
+    let cancelled = false;
+    const myGen = ++refs.loadGen;
+
+    refs.kneePathologySystem?.dispose();
+    refs.kneePathologySystem = null;
+    refs.declarativePathologySystem?.dispose();
+    refs.declarativePathologySystem = null;
+
+    for (const mesh of refs.meshes.values()) {
+      mesh.parent?.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    for (const m of refs.materials.values()) {
+      m.dispose();
+    }
+    refs.meshes.clear();
+    refs.materials.clear();
+    if (refs.focusedTargetAnchor.parent !== refs.femurGroup) {
+      refs.femurGroup.add(refs.focusedTargetAnchor);
+    }
+
+    setModelReady(false);
+    setLoadProgress(0);
+    setLoadError(null);
+
+    const kCfg = jointDef.kinematicConfig;
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+
+    loader.load(
+      jointDef.glbUrl,
+      (gltf) => {
+        if (cancelled || sceneRefs.current !== refs || refs.loadGen !== myGen) {
+          draco.dispose();
+          return;
+        }
+
+        const lm = stateRef.current.landmarks;
+        const pivotArr = lm?.transepicondylarPivot ?? kCfg.pivotFallback;
+        const axisArr = lm?.transepicondylarAxis ?? kCfg.axisFallback;
+        refs.tibiaPivotVec.set(pivotArr[0], pivotArr[1], pivotArr[2]);
+        refs.tibiaPivotAxis.set(axisArr[0], axisArr[1], axisArr[2]).normalize();
+        if (jointDef.id === 'knee' && refs.tibiaPivotAxis.x < 0) {
+          refs.tibiaPivotAxis.negate();
+        }
+        refs.tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
+        refs.tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
+
+        const patSet = new Set(kCfg.patellaStructures ?? []);
+        const medMenSet = new Set(kCfg.medialMeniscusStructures ?? []);
+        const movingSet = new Set(kCfg.movingStructures);
+
+        const collected: Array<{ name: string; mesh: THREE.Mesh }> = [];
+        gltf.scene.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.computeVertexNormals();
+            obj.geometry.computeBoundingBox();
+            collected.push({ name: obj.name, mesh: obj });
+          }
+        });
+
+        for (const { name, mesh } of collected) {
+          if (jointDef.boneNames.includes(name)) {
+            applyBoneOsteologyShading(mesh.geometry, name, jointDef.id);
+          }
+          const mat = createTissueMaterial(
+            name,
+            refs.clipPlane,
+            refs.textureBank,
+            refs.xrayUniform,
+            jointDef
+          );
+          mesh.material = mat;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.userData.structureName = name;
+
+          refs.meshes.set(name, mesh);
+          refs.materials.set(name, mat);
+
+          if (patSet.has(name)) {
+            refs.patellaGroup.add(mesh);
+          } else if (medMenSet.has(name)) {
+            if (name === 'BucketHandleFragment') {
+              refs.tibiaBodyGroup.add(mesh);
+            } else {
+              refs.medialMeniscusGroup.add(mesh);
+            }
+          } else if (movingSet.has(name)) {
+            refs.tibiaBodyGroup.add(mesh);
+          } else {
+            refs.femurGroup.add(mesh);
+          }
+        }
+
+        const patMesh = refs.meshes.get('Patella');
+        if (patMesh) {
+          patMesh.geometry.computeBoundingBox();
+          const pBox = patMesh.geometry.boundingBox;
+          if (pBox) pBox.getCenter(refs.patellaCenterVec);
+        }
+
+        if (jointDef.id === 'knee') {
+          refs.kneePathologySystem = createPathologyOverlaySystem({
+            femurGroup: refs.femurGroup,
+            tibiaBodyGroup: refs.tibiaBodyGroup,
+            medialMeniscusGroup: refs.medialMeniscusGroup,
+            patellaGroup: refs.patellaGroup,
+            meshes: refs.meshes,
+            threeScale: lm?.threeScale ?? 0.04,
+            laterality: lm?.laterality ?? 'Right',
+          });
+        }
+        refs.declarativePathologySystem = createDeclarativePathologySystem(
+          jointDef,
+          lm,
+          refs.femurGroup,
+          refs.tibiaBodyGroup
+        );
+
+        draco.dispose();
+        setModelReady(true);
+        setLoadProgress(100);
+        refs.dirtyShadow();
+        refs.wake(60);
+      },
+      (evt) => {
+        if (!cancelled && evt.total > 0) {
+          setLoadProgress(Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
+        }
+      },
+      () => {
+        draco.dispose();
+        if (!cancelled) {
+          setLoadError(`Unable to load ${jointDef.glbUrl} specimen meshes.`);
+        }
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jointDef]);
 
   // Theme update on vignette dome
   useEffect(() => {
@@ -1031,25 +1088,34 @@ export function KneeSpecimen3D({
     sceneRefs.current?.dirtyShadow();
   }, [flexionDeg, kinematics.patellaLateralShiftX, moduleId, enabledStructures]);
 
-  // Keep tibial flexion pivot synced even if landmarks finish fetching after GLB load
+  // Keep pivot + declarative pathology coordinates synced if landmarks arrive after GLB load
   useEffect(() => {
     const refs = sceneRefs.current;
     if (!refs || !modelReady || !landmarks) return;
-    const pivotArr = landmarks.transepicondylarPivot ?? [0.06, 0.28, 0.1];
-    const axisArr = landmarks.transepicondylarAxis ?? [1, 0, 0];
+    const pivotArr = landmarks.transepicondylarPivot ?? jointDef.kinematicConfig.pivotFallback;
+    const axisArr = landmarks.transepicondylarAxis ?? jointDef.kinematicConfig.axisFallback;
     refs.tibiaPivotVec.set(pivotArr[0], pivotArr[1], pivotArr[2]);
     refs.tibiaPivotAxis.set(axisArr[0], axisArr[1], axisArr[2]).normalize();
-    if (refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
+    if (jointDef.id === 'knee' && refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
     refs.tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
     refs.tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
-    refs.dirtyShadow();
-  }, [landmarks, modelReady]);
 
-  // Fly camera when preset, focus, or cameraTrigger changes
+    refs.declarativePathologySystem?.dispose();
+    refs.declarativePathologySystem = createDeclarativePathologySystem(
+      jointDef,
+      landmarks,
+      refs.femurGroup,
+      refs.tibiaBodyGroup
+    );
+    refs.dirtyShadow();
+  }, [landmarks, modelReady, jointDef]);
+
+  // Fly camera when preset, focus, joint, or cameraTrigger changes
   useEffect(() => {
     const refs = sceneRefs.current;
     if (!refs) return;
     const framed = computeFramedCamera(
+      jointDef,
       cameraPreset,
       cameraDistanceScale,
       moduleId,
@@ -1059,7 +1125,7 @@ export function KneeSpecimen3D({
     refs.animTargetLook = framed.target;
     refs.animTargetPos = framed.pos;
     refs.wake(50);
-  }, [cameraPreset, cameraDistanceScale, cameraTrigger, moduleId, activeStructure, modelReady]);
+  }, [jointDef, cameraPreset, cameraDistanceScale, cameraTrigger, moduleId, activeStructure, modelReady]);
 
   const handleZoomStep = (factor: number) => {
     const refs = sceneRefs.current;
@@ -1082,6 +1148,7 @@ export function KneeSpecimen3D({
     const refs = sceneRefs.current;
     if (!refs) return;
     const framed = computeFramedCamera(
+      jointDef,
       cameraPreset,
       cameraDistanceScale,
       moduleId,
@@ -1103,12 +1170,12 @@ export function KneeSpecimen3D({
   }, [paused, isFullScreenPage]);
 
   return (
-    <section className="stage-pane" aria-label="Interactive 3D knee specimen">
+    <section className="stage-pane" aria-label={`Interactive 3D ${jointDef.shortName.toLowerCase()} specimen`}>
       {/* Simplified Header: Specimen View Segmented Pill + Layers Popover */}
       <header className="pane-header">
         <div className="pane-title-group">
-          <span className="pane-title">3D Knee Specimen</span>
-          <span className="pane-badge">{landmarks?.laterality ?? 'Right'} · 3T OpenMSK</span>
+          <span className="pane-title">3D {jointDef.shortName} Specimen</span>
+          <span className="pane-badge">{landmarks?.laterality ?? 'Right'} · {jointDef.mriSpecLabel}</span>
         </div>
 
         <div className="pane-actions">
@@ -1141,7 +1208,7 @@ export function KneeSpecimen3D({
                 <div className="popover-section">
                   <div className="popover-heading">3D Display Style</div>
                   <div className="camera-grid two-col">
-                    {VIEW_MODES.map((m) => (
+                    {viewModes.map((m) => (
                       <button
                         key={m.id}
                         type="button"
@@ -1160,7 +1227,7 @@ export function KneeSpecimen3D({
                 <div className="popover-section">
                   <div className="popover-heading">Camera Viewpoint</div>
                   <div className="camera-grid">
-                    {(Object.keys(CAMERA_PRESETS) as CameraPresetKey[]).map((key) => (
+                    {(Object.keys(jointDef.cameraPresets) as CameraPresetKey[]).map((key) => (
                       <button
                         key={key}
                         type="button"
@@ -1170,7 +1237,7 @@ export function KneeSpecimen3D({
                           setLayersMenuOpen(false);
                         }}
                       >
-                        {CAMERA_PRESETS[key].label}
+                        {jointDef.cameraPresets[key].label}
                       </button>
                     ))}
                   </div>
@@ -1215,7 +1282,7 @@ export function KneeSpecimen3D({
       <div className="viewport-body" ref={stageRef}>
         {!modelReady && !loadError && (
           <div className="viewport-status">
-            <span>Loading 3T Knee Mesh… {loadProgress}%</span>
+            <span>Loading 3T {jointDef.shortName} Mesh… {loadProgress}%</span>
           </div>
         )}
         {loadError && (
@@ -1224,7 +1291,7 @@ export function KneeSpecimen3D({
           </div>
         )}
 
-        {/* Single Focused Callout Pin OR All 8 Pins (Direct DOM Refs — zero per-frame React renders) */}
+        {/* Single Focused Callout Pin OR All Pins (Direct DOM Refs — zero per-frame React renders) */}
         {modelReady && !hideLabels && (
           <>
             <div
@@ -1264,8 +1331,9 @@ export function KneeSpecimen3D({
               aria-hidden={!showAllLabels}
               style={{ display: showAllLabels ? 'block' : 'none' }}
             >
-              {ALL_PIN_STRUCTURES.map((sid) => {
-                const info = STRUCTURES_INFO[sid];
+              {jointDef.allPinStructures.map((sid) => {
+                const info = jointDef.structuresInfo[sid];
+                if (!info) return null;
                 const active = sid === activeStructure;
                 return (
                   <button
@@ -1293,7 +1361,7 @@ export function KneeSpecimen3D({
             <div className="chondral-scale-card">
               <span className="scale-lbl">0.0 mm</span>
               <div className="scale-gradient" />
-              <span className="scale-lbl">3.8 mm</span>
+              <span className="scale-lbl">{jointDef.cartilageMaxMmLabel ?? '3.8 mm'}</span>
             </div>
           </div>
         )}

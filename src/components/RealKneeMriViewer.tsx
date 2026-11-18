@@ -15,8 +15,9 @@ import {
   SLICE_TYPE,
   type NiiVueLocation,
 } from '@niivue/niivue';
-import { MRI_CONTRAST_PRESETS, STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
+  ContrastPresetConfig,
+  JointAtlasDefinition,
   KneeLandmarks,
   MriAnnotation,
   MriContrastPreset,
@@ -27,6 +28,7 @@ import type {
 import { MriPathologyOverlay } from './MriPathologyOverlay';
 
 interface RealKneeMriViewerProps {
+  jointDef: JointAtlasDefinition;
   landmarks: KneeLandmarks | null;
   contrastPreset: MriContrastPreset;
   onContrastChange: (preset: MriContrastPreset) => void;
@@ -50,14 +52,6 @@ interface RealKneeMriViewerProps {
   onQuizMriClick?: (id: StructureId) => void;
 }
 
-const SEG_COLORMAP = {
-  R: [0, 212, 204, 192, 218, 124, 108, 102, 134, 48, 38, 217, 174, 86, 98, 206, 196],
-  G: [0, 202, 194, 184, 208, 206, 194, 186, 212, 178, 152, 166, 132, 192, 198, 168, 158],
-  B: [0, 184, 178, 168, 190, 232, 224, 218, 236, 172, 184, 104, 214, 154, 140, 210, 202],
-  A: [0, 110, 110, 110, 110, 205, 205, 205, 205, 225, 225, 240, 240, 225, 225, 200, 200],
-  I: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-};
-
 const SUBREGION_COLORMAP = {
   R: [0, 126, 0, 82, 108, 45, 38, 198, 190, 205, 0, 92, 218, 56, 226, 48],
   G: [0, 208, 0, 186, 202, 168, 148, 190, 182, 196, 0, 164, 154, 194, 116, 138],
@@ -66,24 +60,69 @@ const SUBREGION_COLORMAP = {
   I: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
 };
 
-const LABEL_INDEX_TO_ID: Record<number, StructureId> = {
-  1: 'Femur',
-  2: 'Tibia',
-  3: 'Fibula',
-  4: 'Patella',
-  5: 'FemoralCartilage',
-  6: 'MedialTibialCartilage',
-  7: 'LateralTibialCartilage',
-  8: 'PatellarCartilage',
-  9: 'MedialMeniscus',
-  10: 'LateralMeniscus',
-  11: 'ACL',
-  12: 'PCL',
-  13: 'MCL',
-  14: 'LCL',
-  15: 'PatellarTendon',
-  16: 'QuadricepsTendon',
-};
+function buildJointSegMaps(jointDef: JointAtlasDefinition): {
+  colormap: { R: number[]; G: number[]; B: number[]; A: number[]; I: number[] };
+  labelToId: Record<number, StructureId>;
+  maxLabel: number;
+} {
+  let maxLabel = 16;
+  const labelToId: Record<number, StructureId> = {};
+  for (const info of Object.values(jointDef.structuresInfo)) {
+    if (info.labelIndex > 0) {
+      labelToId[info.labelIndex] = info.id;
+      if (info.labelIndex > maxLabel) maxLabel = info.labelIndex;
+    }
+  }
+
+  const R = [0];
+  const G = [0];
+  const B = [0];
+  const A = [0];
+  const I = [0];
+
+  for (let idx = 1; idx <= maxLabel; idx++) {
+    I.push(idx);
+    const sid = labelToId[idx];
+    const info = sid ? jointDef.structuresInfo[sid] : undefined;
+    const grp = info?.group ?? 'other';
+    const tweak = ((idx * 13) % 28) - 14;
+
+    if (grp === 'bone') {
+      R.push(Math.max(40, Math.min(250, 206 + tweak)));
+      G.push(Math.max(40, Math.min(250, 194 + tweak)));
+      B.push(Math.max(40, Math.min(250, 176 + tweak)));
+      A.push(108);
+    } else if (grp === 'cartilage') {
+      R.push(Math.max(40, Math.min(250, 112 + tweak)));
+      G.push(Math.max(40, Math.min(250, 198 + tweak)));
+      B.push(Math.max(40, Math.min(250, 228 + tweak)));
+      A.push(205);
+    } else if (grp === 'meniscus' || grp === 'fibrocartilage') {
+      R.push(Math.max(20, Math.min(240, 44 + tweak)));
+      G.push(Math.max(40, Math.min(240, 170 + tweak)));
+      B.push(Math.max(40, Math.min(240, 182 + tweak)));
+      A.push(225);
+    } else if (grp === 'cruciate' || grp === 'ligament' || grp === 'collateral') {
+      const alt = idx % 2 === 0;
+      R.push(alt ? 218 : 96);
+      G.push(alt ? 168 : 196);
+      B.push(alt ? 92 : 148);
+      A.push(235);
+    } else if (grp === 'nerve') {
+      R.push(245);
+      G.push(192);
+      B.push(78);
+      A.push(238);
+    } else {
+      R.push(Math.max(40, Math.min(240, 196 + tweak)));
+      G.push(Math.max(40, Math.min(240, 162 + tweak)));
+      B.push(Math.max(40, Math.min(240, 208 + tweak)));
+      A.push(205);
+    }
+  }
+
+  return { colormap: { R, G, B, A, I }, labelToId, maxLabel };
+}
 
 const PLANE_OPTIONS: Array<{ id: MriPlaneMode; label: string; sliceType: SLICE_TYPE }> = [
   { id: 'sagittal', label: 'Sag', sliceType: SLICE_TYPE.SAGITTAL },
@@ -118,6 +157,7 @@ function applyCenteredZoom(
 function findNearestLandmarkStructure(
   mm: [number, number, number],
   landmarks: KneeLandmarks | null,
+  structuresInfo: JointAtlasDefinition['structuresInfo'],
   candidates?: StructureId[],
   maxDistMm = 18
 ): StructureId | null {
@@ -125,7 +165,7 @@ function findNearestLandmarkStructure(
   const pool =
     candidates && candidates.length > 0
       ? candidates
-      : (Object.keys(STRUCTURES_INFO) as StructureId[]);
+      : (Object.keys(structuresInfo) as StructureId[]);
 
   let bestId: StructureId | null = null;
   let bestDist = maxDistMm;
@@ -146,6 +186,7 @@ function findNearestLandmarkStructure(
 }
 
 export function RealKneeMriViewer({
+  jointDef,
   landmarks,
   contrastPreset,
   onContrastChange,
@@ -174,15 +215,22 @@ export function RealKneeMriViewer({
 
   const nvRef = useRef<Niivue | null>(null);
   const readyRef = useRef(false);
+  const [nvAttached, setNvAttached] = useState(false);
   const baseLoadedRef = useRef(false);
+  const volLoadGenRef = useRef(0);
   const loadedOverlayFileRef = useRef<'atlas' | 'subregions'>('atlas');
   const suppressingSyncRef = useRef(false);
   const wheelAccumRef = useRef(0);
   const lastPanSigRef = useRef('');
-  const currentMmRef = useRef<[number, number, number]>([112.6, 20.6, -11.9]);
+  const currentMmRef = useRef<[number, number, number]>(jointDef.defaultMriSliceRas);
+
+  const segMaps = useMemo(() => buildJointSegMaps(jointDef), [jointDef]);
 
   const propsRef = useRef({
+    jointDef,
+    segMaps,
     planeMode,
+    contrastPreset,
     mriZoom,
     targetRasMm,
     showTargetPointer,
@@ -196,7 +244,10 @@ export function RealKneeMriViewer({
     onMriZoomChange,
   });
   propsRef.current = {
+    jointDef,
+    segMaps,
     planeMode,
+    contrastPreset,
     mriZoom,
     targetRasMm,
     showTargetPointer,
@@ -211,6 +262,8 @@ export function RealKneeMriViewer({
   };
 
   const [loading, setLoading] = useState(true);
+  const [loadedJointId, setLoadedJointId] = useState<string>('');
+  const loadedJointIdRef = useRef<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [wlMenuOpen, setWlMenuOpen] = useState(false);
   const [mouseTool, setMouseTool] = useState<'scroll' | 'pan'>('scroll');
@@ -248,7 +301,15 @@ export function RealKneeMriViewer({
   const projectRas = useCallback((ras: [number, number, number]): [number, number] | null => {
     const nv = nvRef.current;
     const canvas = canvasRef.current;
-    if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !canvas) return null;
+    if (
+      !nv ||
+      !baseLoadedRef.current ||
+      !nv.volumes[0] ||
+      !canvas ||
+      loadedJointIdRef.current !== propsRef.current.jointDef.id
+    ) {
+      return null;
+    }
     const slices = nv.screenSlices;
     if (!slices || slices.length === 0) return null;
 
@@ -260,25 +321,24 @@ export function RealKneeMriViewer({
           ? SLICE_TYPE.CORONAL
           : SLICE_TYPE.SAGITTAL;
 
+    const isValidTile = (s: (typeof slices)[number]) =>
+      s.fovMM?.length >= 2 &&
+      s.leftTopMM?.length >= 2 &&
+      s.leftTopWidthHeight?.length >= 4 &&
+      Number.isFinite(s.fovMM[0]) &&
+      Number.isFinite(s.fovMM[1]) &&
+      s.fovMM[0] !== 0 &&
+      s.fovMM[1] !== 0 &&
+      Number.isFinite(s.leftTopMM[0]) &&
+      Number.isFinite(s.leftTopMM[1]) &&
+      Number.isFinite(s.leftTopWidthHeight[0]) &&
+      Number.isFinite(s.leftTopWidthHeight[1]) &&
+      Number.isFinite(s.leftTopWidthHeight[2]) &&
+      Number.isFinite(s.leftTopWidthHeight[3]);
+
     const tile =
-      slices.find(
-        (s) =>
-          s.axCorSag === targetSliceType &&
-          s.fovMM?.length >= 2 &&
-          s.leftTopMM?.length >= 2 &&
-          s.leftTopWidthHeight?.length >= 4 &&
-          s.fovMM[0] !== 0 &&
-          s.fovMM[1] !== 0
-      ) ??
-      slices.find(
-        (s) =>
-          s.axCorSag <= SLICE_TYPE.SAGITTAL &&
-          s.fovMM?.length >= 2 &&
-          s.leftTopMM?.length >= 2 &&
-          s.leftTopWidthHeight?.length >= 4 &&
-          s.fovMM[0] !== 0 &&
-          s.fovMM[1] !== 0
-      );
+      slices.find((s) => s.axCorSag === targetSliceType && isValidTile(s)) ??
+      slices.find((s) => s.axCorSag <= SLICE_TYPE.SAGITTAL && isValidTile(s));
     if (!tile) return null;
 
     let xMM = ras[0];
@@ -311,12 +371,16 @@ export function RealKneeMriViewer({
 
     const sx = canvas.clientWidth / Math.max(1, canvas.width);
     const sy = canvas.clientHeight / Math.max(1, canvas.height);
-    return [devX * sx, devY * sy];
+    const outX = devX * sx;
+    const outY = devY * sy;
+    return Number.isFinite(outX) && Number.isFinite(outY) ? [outX, outY] : null;
   }, []);
 
-  const presetMeta = useMemo(
-    () => MRI_CONTRAST_PRESETS.find((s) => s.id === contrastPreset) ?? MRI_CONTRAST_PRESETS[0],
-    [contrastPreset]
+  const presetMeta: ContrastPresetConfig = useMemo(
+    () =>
+      jointDef.mriContrastPresets.find((s) => s.id === contrastPreset) ??
+      jointDef.mriContrastPresets[0],
+    [jointDef.mriContrastPresets, contrastPreset]
   );
 
   // Close W/L dropdown on outside click
@@ -540,41 +604,91 @@ export function RealKneeMriViewer({
       try {
         await nv.attachToCanvas(canvas);
         if (disposed) return;
-        nv.setInterpolation(true);
+        nv.setInterpolation(false);
         readyRef.current = true;
+        setNvAttached(true);
+      } catch (err) {
+        if (!disposed) {
+          setErrorMsg(err instanceof Error ? err.message : 'Unable to initialize 3T MRI viewer');
+          setLoading(false);
+        }
+      }
+    })();
 
-        setLoading(true);
-        setErrorMsg(null);
+    return () => {
+      disposed = true;
+      readyRef.current = false;
+      baseLoadedRef.current = false;
+      nvRef.current = null;
+    };
+  }, [recomputeSpotlight, syncSliceReadout]);
+
+  // Load Active Joint MRI & Segmentation Volumes into Persistent Niivue Context
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || !nvAttached) return;
+
+    let cancelled = false;
+    const myGen = ++volLoadGenRef.current;
+    baseLoadedRef.current = false;
+    loadedJointIdRef.current = '';
+    setLoadedJointId('');
+    setLoading(true);
+    setErrorMsg(null);
+
+    const activeOverlayMode: MriOverlayMode =
+      !jointDef.supportsSubregionOverlay && overlayModeRef.current === 'subregions'
+        ? 'none'
+        : overlayModeRef.current;
+    const useSubregions =
+      activeOverlayMode === 'subregions' && Boolean(jointDef.mriSubregionSegUrl);
+    const initialPreset =
+      jointDef.mriContrastPresets.find((s) => s.id === propsRef.current.contrastPreset) ??
+      jointDef.mriContrastPresets[0];
+    const initMin = initialPreset?.defaultMin ?? 14;
+    const initMax = initialPreset?.defaultMax ?? 222;
+    const segUrl = useSubregions
+      ? jointDef.mriSubregionSegUrl!
+      : jointDef.mriSegUrl;
+
+    (async () => {
+      try {
+        while (nv.volumes.length > 0) {
+          nv.removeVolumeByIndex(nv.volumes.length - 1);
+        }
+
         await nv.loadVolumes([
           {
-            url: '/volumes/knee-invivo-3t-qdess.nii.gz',
+            url: jointDef.mriVolumeUrl,
             colormap: 'gray',
-            cal_min: 14,
-            cal_max: 222,
+            cal_min: initMin,
+            cal_max: initMax,
             trustCalMinMax: true,
           },
           {
-            url: '/volumes/knee-invivo-seg.nii.gz',
-            opacity: 0,
+            url: segUrl,
+            opacity: activeOverlayMode === 'none' ? 0 : segOpacity,
             cal_min: 0,
-            cal_max: 16,
+            cal_max: useSubregions ? 16 : segMaps.maxLabel,
             trustCalMinMax: true,
           },
         ]);
-        if (disposed) return;
+        if (cancelled || volLoadGenRef.current !== myGen) return;
 
         baseLoadedRef.current = true;
-        loadedOverlayFileRef.current = 'atlas';
+        loadedOverlayFileRef.current = useSubregions ? 'subregions' : 'atlas';
         if (nv.volumes[1]) {
-          nv.volumes[1].setColormapLabel(SEG_COLORMAP);
-          nv.setOpacity(1, 0);
+          nv.volumes[1].setColormapLabel(
+            useSubregions ? SUBREGION_COLORMAP : segMaps.colormap
+          );
+          nv.setOpacity(1, activeOverlayMode === 'none' ? 0 : segOpacity);
         }
         nv.setSliceMM(true);
         const match = PLANE_OPTIONS.find((opt) => opt.id === propsRef.current.planeMode);
         if (match) nv.setSliceType(match.sliceType);
 
-        const ras = propsRef.current.targetRasMm;
-        if (ras && nv.volumes[0]) {
+        const ras = propsRef.current.targetRasMm ?? jointDef.defaultMriSliceRas;
+        if (nv.volumes[0]) {
           suppressingSyncRef.current = true;
           const frac = nv.mm2frac(ras);
           nv.scene.crosshairPos = [
@@ -591,27 +705,26 @@ export function RealKneeMriViewer({
           window.setTimeout(() => {
             suppressingSyncRef.current = false;
           }, 50);
-        } else {
-          applyCenteredZoom(nv, propsRef.current.mriZoom, null);
-          nv.updateGLVolume();
-          syncSliceReadout(nv, Array.from(nv.scene.crosshairPos));
         }
+        loadedJointIdRef.current = jointDef.id;
+        setLoadedJointId(jointDef.id);
         setLoading(false);
       } catch (err) {
-        if (!disposed) {
-          setErrorMsg(err instanceof Error ? err.message : 'Unable to load 3T qDESS MRI volume');
+        if (!cancelled && volLoadGenRef.current === myGen) {
+          setErrorMsg(
+            err instanceof Error
+              ? err.message
+              : `Unable to load ${jointDef.mriSliceTitle} volume`
+          );
           setLoading(false);
         }
       }
     })();
 
     return () => {
-      disposed = true;
-      readyRef.current = false;
-      baseLoadedRef.current = false;
-      nvRef.current = null;
+      cancelled = true;
     };
-  }, [recomputeSpotlight, syncSliceReadout]);
+  }, [nvAttached, jointDef, segMaps, recomputeSpotlight]);
 
   // ResizeObserver + PACS Wheel Slice Scroll, Cine-Stack Left-Drag & Structure Pick
   useEffect(() => {
@@ -654,7 +767,7 @@ export function RealKneeMriViewer({
         const iz = Math.round(vox[2]);
         if (ix >= 0 && ix < nx && iy >= 0 && iy < ny && iz >= 0 && iz < nz) {
           const labelVal = Math.round(nv.volumes[1].img[ix + iy * nx + iz * nx * ny] ?? 0);
-          pickedId = LABEL_INDEX_TO_ID[labelVal] ?? null;
+          pickedId = p.segMaps.labelToId[labelVal] ?? null;
         }
       }
 
@@ -662,6 +775,7 @@ export function RealKneeMriViewer({
         pickedId = findNearestLandmarkStructure(
           mm,
           p.landmarks,
+          p.jointDef.structuresInfo,
           p.hideTargetForQuiz ? p.quizCandidateStructures : undefined,
           p.hideTargetForQuiz ? 22 : 18
         );
@@ -818,40 +932,46 @@ export function RealKneeMriViewer({
 
     const syncOverlay = async () => {
       if (overlayMode === 'none') {
-        if (nv.volumes[1]) nv.setOpacity(1, 0);
+        if (nv.volumes[1]) {
+          nv.setOpacity(1, 0);
+          nv.updateGLVolume();
+          nv.drawScene();
+        }
         return;
       }
 
       if (overlayMode !== loadedOverlayFileRef.current) {
         try {
+          const useSub =
+            overlayMode === 'subregions' && Boolean(jointDef.mriSubregionSegUrl);
           if (nv.volumes.length > 1) {
             nv.removeVolumeByIndex(1);
           }
-          const url =
-            overlayMode === 'subregions'
-              ? '/volumes/knee-invivo-subregions.nii.gz'
-              : '/volumes/knee-invivo-seg.nii.gz';
+          const url = useSub ? jointDef.mriSubregionSegUrl! : jointDef.mriSegUrl;
           await nv.addVolumeFromUrl({
             url,
             opacity: segOpacity,
             cal_min: 0,
-            cal_max: 16,
+            cal_max: useSub ? 16 : segMaps.maxLabel,
             trustCalMinMax: true,
           });
           if (cancelled) return;
-          loadedOverlayFileRef.current = overlayMode;
+          loadedOverlayFileRef.current = useSub ? 'subregions' : 'atlas';
           if (nv.volumes[1]) {
             nv.volumes[1].setColormapLabel(
-              overlayMode === 'subregions' ? SUBREGION_COLORMAP : SEG_COLORMAP
+              useSub ? SUBREGION_COLORMAP : segMaps.colormap
             );
             nv.setOpacity(1, segOpacity);
           }
           nv.updateGLVolume();
+          nv.drawScene();
         } catch {
           // Safe fallback if interrupted mid-load
         }
       } else if (nv.volumes[1]) {
         nv.setOpacity(1, segOpacity);
+        nv.updateGLVolume();
+        nv.drawScene();
       }
     };
 
@@ -859,7 +979,7 @@ export function RealKneeMriViewer({
     return () => {
       cancelled = true;
     };
-  }, [overlayMode, segOpacity, loading]);
+  }, [overlayMode, segOpacity, loading, jointDef, segMaps]);
 
   // Crosshair Jump on Explicit Target Focus (Sidebar / Pathology Step / Quiz / Guide Link)
   useEffect(() => {
@@ -967,11 +1087,11 @@ export function RealKneeMriViewer({
   };
 
   return (
-    <section className="stage-pane" aria-label="In-Vivo 3T Knee qDESS MRI Viewer">
+    <section className="stage-pane" aria-label={`In-Vivo 3T ${jointDef.shortName} MRI Viewer`}>
       {/* Simplified Header: Plane Tabs + Target Pointer + Colors + W/L Popover */}
       <header className="pane-header">
         <div className="pane-title-group">
-          <span className="pane-title">3T qDESS MRI</span>
+          <span className="pane-title">{jointDef.mriSliceTitle}</span>
           <span className="pane-badge">{presetMeta.shortLabel}</span>
         </div>
 
@@ -1021,7 +1141,7 @@ export function RealKneeMriViewer({
                 <div className="popover-section">
                   <div className="popover-heading">Window / Level Presets</div>
                   <div className="wl-list">
-                    {MRI_CONTRAST_PRESETS.map((wl) => (
+                    {jointDef.mriContrastPresets.map((wl) => (
                       <button
                         key={wl.id}
                         type="button"
@@ -1041,12 +1161,16 @@ export function RealKneeMriViewer({
                 <div className="popover-section">
                   <div className="popover-heading">Color Overlay Mode</div>
                   <div className="camera-grid">
-                    {(
-                      [
-                        ['none', 'Clean Grayscale'],
-                        ['atlas', '16-Tissue Atlas'],
-                        ['subregions', 'OA Subregions'],
-                      ] as Array<[MriOverlayMode, string]>
+                    {(jointDef.supportsSubregionOverlay
+                      ? ([
+                          ['none', 'Clean Grayscale'],
+                          ['atlas', '16-Tissue Atlas'],
+                          ['subregions', 'OA Subregions'],
+                        ] as Array<[MriOverlayMode, string]>)
+                      : ([
+                          ['none', 'Clean Grayscale'],
+                          ['atlas', 'Anatomy Atlas'],
+                        ] as Array<[MriOverlayMode, string]>)
                     ).map(([modeId, lbl]) => (
                       <button
                         key={modeId}
@@ -1085,7 +1209,7 @@ export function RealKneeMriViewer({
 
         {loading && !errorMsg && (
           <div className="viewport-status">
-            <span>Loading 3T qDESS MRI volume…</span>
+            <span>Loading {jointDef.mriSliceTitle} volume…</span>
           </div>
         )}
         {errorMsg && (
@@ -1095,7 +1219,7 @@ export function RealKneeMriViewer({
         )}
 
         {/* RAS-Registered MRI Pathology Arrows, Tear Clefts & Edema Overlays */}
-        {!loading && (
+        {!loading && loadedJointId === jointDef.id && (
           <MriPathologyOverlay
             annotations={mriAnnotations}
             visible={showTargetPointer && !hideTargetForQuiz}
@@ -1203,7 +1327,7 @@ export function RealKneeMriViewer({
               type="button"
               className="zoom-reset-btn"
               onClick={() => onMriZoomChange(1.0)}
-              title="Fit full knee FOV"
+              title={`Fit full ${jointDef.shortName} FOV`}
             >
               <Maximize2 size={11} />
               <span>Fit</span>

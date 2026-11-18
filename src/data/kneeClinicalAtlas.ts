@@ -674,7 +674,7 @@ export const KNEE_MODULES: KneeModule[] = [
   },
 
   // ============================================================================
-  // TRACK 1: HOW TO APPROACH KNEE MRI (SYSTEMATIC RADIOLOGY ASSISTANT PROTOCOL)
+  // TRACK 1: HOW TO APPROACH KNEE MRI (SYSTEMATIC PROTOCOL)
   // ============================================================================
   {
     id: 'approach-sequences',
@@ -685,7 +685,7 @@ export const KNEE_MODULES: KneeModule[] = [
     tag: 'How to Read MRI',
     diagnosticSign: 'Two-Slice Articular Rule · T2 vs PD Pitfall',
     summary:
-      'Start every knee MRI by orienting planes and applying two foundational Radiology Assistant laws that prevent 80% of resident false-positives.',
+      'Start every knee MRI by orienting planes and applying two foundational reading-room rules that prevent 80% of resident false-positives.',
     subSteps: [
       {
         id: 'seq-fluid',
@@ -781,7 +781,7 @@ export const KNEE_MODULES: KneeModule[] = [
     ],
     boardPearls: [
       {
-        exam: 'Radiology Assistant Law',
+        exam: 'Articular Surface Law',
         pearl: 'Intrasubstance high signal that stops short of the tibial or femoral meniscal surface on 2 consecutive slices is mucoid degeneration, not a surgical tear.',
       },
     ],
@@ -1180,7 +1180,7 @@ export const KNEE_MODULES: KneeModule[] = [
     tag: '3D Pathology',
     diagnosticSign: 'Longitudinal vs Radial vs Horizontal + Cyst',
     summary:
-      'Top-down 3D dissection of the tibial plateau demonstrating the three classic Radiology Assistant meniscal tear geometries directly on the C-shaped medial meniscus.',
+      'Top-down 3D dissection of the tibial plateau demonstrating the three classic meniscal tear geometries directly on the C-shaped medial meniscus.',
     subSteps: [
       {
         id: 'tear-longitudinal',
@@ -2378,6 +2378,264 @@ export const KNEE_MODULES: KneeModule[] = [
       },
     ],
   },
+  {
+    id: 'ramp-wrisberg',
+    order: 18,
+    category: 'pathology',
+    title: 'Posteromedial Ramp & Wrisberg Rip',
+    shortTitle: 'Ramp & Wrisberg Rip',
+    tag: '3D Pathology',
+    diagnosticSign: 'ACL-Associated PHMM Capsular Separation · Lateral Zip Tear',
+    summary:
+      'Two easily overlooked peripheral meniscal injuries strongly linked to acute ACL rupture: posteromedial meniscocapsular ramp separation and longitudinal Wrisberg rip tears extending medial to the popliteal hiatus.',
+    biomechControl: 'flexion',
+    subSteps: [
+      {
+        id: 'ramp-cleft',
+        label: '1. Posteromedial Ramp Cleft',
+        focusStructure: 'MedialMeniscus',
+        targetRasOverride: [87.0, 2.5, -17.5],
+        targetBadge: 'Posteromedial Ramp Junction',
+        viewMode3D: 'plateau-topdown',
+        cameraPreset: 'posterior',
+        cameraDistanceScale: 1.08,
+        mriPlane: 'sagittal',
+        mriContrast: 'qdess-clinical',
+        mriZoom: 1.45,
+        flexionDeg: 14,
+        mriAnnotations: [
+          {
+            kind: 'cleft',
+            pointsRas: [
+              [87.0, 1.0, -14.5],
+              [87.0, 2.2, -20.5],
+            ],
+            tone: 'crimson',
+            widthPx: 3.0,
+            label: 'Ramp Fluid Cleft (SMJ)',
+          },
+          {
+            kind: 'edema',
+            centerRas: [87.0, 5.5, -24.5],
+            radiusMm: 7.5,
+            tone: 'amber',
+            label: 'PM Tibia Margin Bruise',
+          },
+        ],
+        whatToLookFor:
+          'Look along the posterior peripheral margin of the medial meniscus on fluid-sensitive sagittal images for thin linear fluid filling the meniscocapsular separation behind the posterior horn.',
+        diagnosticRules: [
+          'Thin bright fluid cleft or complete meniscotibial ligament stripping between the PHMM and posteromedial capsule.',
+          'Often accompanied by a characteristic posteromedial tibial plateau contrecoup marrow contusion.',
+        ],
+        pitfallAndHook:
+          'Hidden behind the posterior tibial horn at arthroscopy: MRI warning prompts an accessory posteromedial portal to prevent graft stretching.',
+      },
+      {
+        id: 'ramp-acl-companion',
+        label: '2. ACL Graft Failure Risk',
+        focusStructure: 'ACL',
+        targetBadge: 'Unstable ACL + PHMM Junction',
+        viewMode3D: 'joint-interior',
+        cameraPreset: 'notch',
+        cameraDistanceScale: 1.06,
+        mriPlane: 'sagittal',
+        mriContrast: 'qdess-clinical',
+        mriZoom: 1.35,
+        flexionDeg: 25,
+        mriAnnotations: [
+          {
+            kind: 'arrow',
+            fromRas: [112.5, 36.0, 9.5],
+            toRas: [112.5, 25.0, -2.0],
+            tone: 'crimson',
+            label: 'ACL Instability Load',
+          },
+        ],
+        whatToLookFor:
+          'Because the posterior horn of the medial meniscus acts as a primary brake against anterior tibial translation, an unrepaired ramp lesion leaves persistent rotatory laxity even after ACL reconstruction.',
+        diagnosticRules: [
+          'Check every acute ACL tear systematically along the entire posteromedial corner on sagittal fluid-sensitive slices.',
+          'Fluid-interposed clefts (> 1–2 mm) or meniscocapsular irregularity require repair.',
+        ],
+        pitfallAndHook:
+          'Routine supine neutral extension may reduce the cleft and hide fluid—look carefully for irregularity of the posterior meniscocapsular cortex.',
+      },
+      {
+        id: 'wrisberg-rip',
+        label: '3. Wrisberg Zip Tear',
+        focusStructure: 'LateralMeniscus',
+        targetRasOverride: [130.5, 7.5, -14.5],
+        targetBadge: 'Wrisberg Zip Tear Zone',
+        viewMode3D: 'plateau-topdown',
+        cameraPreset: 'posterior',
+        cameraDistanceScale: 1.08,
+        mriPlane: 'sagittal',
+        mriContrast: 'meniscus-cruciate',
+        mriZoom: 1.45,
+        flexionDeg: 10,
+        mriAnnotations: [
+          {
+            kind: 'cleft',
+            pointsRas: [
+              [130.5, 7.2, -11.5],
+              [130.5, 9.2, -16.8],
+            ],
+            tone: 'crimson',
+            widthPx: 3.0,
+            label: 'Longitudinal Zip Cleft',
+          },
+        ],
+        whatToLookFor:
+          'Examine the posterior horn of the lateral meniscus near the notch where the meniscofemoral ligament of Wrisberg attaches. Sudden traction during pivot-shift tears a longitudinal vertical split.',
+        diagnosticRules: [
+          'Vertical longitudinal tear in the PHLM located within ~14 mm of the PCL insertion where the Wrisberg ligament inserts.',
+          'Trace carefully on coronal and sagittal slices to distinguish from the normal Wrisberg insertion cleft.',
+        ],
+        pitfallAndHook:
+          'The normal oblique low-signal Wrisberg band creates a fat/synovial interface at the superolateral posterior horn; a true zip tear extends vertically into the meniscus body.',
+      },
+    ],
+    mriChecklist: [
+      'Inspect the posteromedial meniscocapsular junction on every acute ACL tear.',
+      'Look for posteromedial tibial plateau marrow contusion behind the medial meniscus.',
+      'Screen the lateral posterior horn medial to the popliteal hiatus for a Wrisberg zip tear.',
+    ],
+    boardPearls: [
+      {
+        exam: 'Stability Rule',
+        pearl: 'Present in 15–25% of ACL ruptures; missed ramp lesions are a leading cause of persistent anteroposterior instability after ACL surgery.',
+      },
+    ],
+  },
+  {
+    id: 'sifk-hoffa',
+    order: 19,
+    category: 'pathology',
+    title: 'SIFK & Hoffa Impingement',
+    shortTitle: 'SIFK & Hoffa Edema',
+    tag: '3D Pathology',
+    diagnosticSign: 'Subchondral Crescent Line · Superolateral Hoffa Edema',
+    summary:
+      'High-yield non-ligamentous pain generators often misdiagnosed on knee MRI: spontaneous subchondral insufficiency fracture of the knee (SIFK) following root failure, and superolateral Hoffa fat pad impingement.',
+    subSteps: [
+      {
+        id: 'sifk-crescent',
+        label: '1. Subchondral Crescent',
+        focusStructure: 'Femur',
+        targetRasOverride: [90.5, 19.0, -5.5],
+        targetBadge: 'Medial Condyle SIFK',
+        viewMode3D: 'solid',
+        cameraPreset: 'medial',
+        cameraDistanceScale: 1.06,
+        mriPlane: 'coronal',
+        mriContrast: 'trabecular',
+        mriZoom: 1.4,
+        flexionDeg: 4,
+        mriAnnotations: [
+          {
+            kind: 'cleft',
+            pointsRas: [
+              [84.5, 19.0, -6.8],
+              [90.5, 19.0, -7.8],
+              [96.5, 19.0, -6.5],
+            ],
+            tone: 'crimson',
+            widthPx: 2.8,
+            label: 'Low-Signal Fracture Crescent',
+          },
+          {
+            kind: 'edema',
+            centerRas: [90.5, 19.0, 2.0],
+            radiusMm: 10.5,
+            tone: 'amber',
+            label: 'Disproportionate Condylar BML',
+          },
+        ],
+        whatToLookFor:
+          'Directly beneath the weight-bearing medial femoral condyle articular cortex, search for a thin serpiginous dark line paralleling the articular surface surrounded by extensive marrow edema.',
+        diagnosticRules: [
+          'Curvilinear hypointense subchondral fracture line <= 3 mm below the weight-bearing articular cortex.',
+          'Massive disproportionate bone marrow edema filling much of the condyle is classic for SIFK.',
+        ],
+        pitfallAndHook:
+          'Unlike classic AVN (SONK misnomer), SIFK lacks a serpentine geographic rim or double-line sign in its early stage—check for an extruded medial meniscal root!',
+      },
+      {
+        id: 'sifk-root-link',
+        label: '2. Root Overload Mechanism',
+        focusStructure: 'MedialMeniscus',
+        targetRasOverride: [81.0, 20.0, -16.5],
+        targetBadge: 'Meniscal Overload Trigger',
+        viewMode3D: 'plateau-topdown',
+        cameraPreset: 'plateau',
+        cameraDistanceScale: 1.06,
+        mriPlane: 'coronal',
+        mriContrast: 'qdess-clinical',
+        mriZoom: 1.35,
+        flexionDeg: 6,
+        mriAnnotations: [
+          {
+            kind: 'arrow',
+            fromRas: [84.0, 20.0, -16.5],
+            toRas: [77.5, 20.0, -16.5],
+            tone: 'amber',
+            label: '> 3 mm Meniscal Extrusion',
+          },
+        ],
+        whatToLookFor:
+          'Loss of meniscal hoop stress from a medial posterior root tear or partial meniscectomy concentrates axial load directly onto bare subchondral bone, precipitating trabecular microfracture.',
+        diagnosticRules: [
+          'Measure coronal meniscal extrusion past the medial tibial margin (> 3 mm).',
+          'Assess articular surface contour for flattening or subchondral collapse (> 4 mm predicts poor non-operative prognosis).',
+        ],
+        pitfallAndHook:
+          'Reporting SIFK early while articular contour remains convex enables protected non-weight-bearing offloading before irreversible collapse occurs.',
+      },
+      {
+        id: 'hoffa-impingement',
+        label: '3. Superolateral Hoffa Edema',
+        focusStructure: 'PatellarTendon',
+        targetRasOverride: [128.0, 44.0, 12.0],
+        targetBadge: 'Superolateral Hoffa Fat Pad',
+        viewMode3D: 'solid',
+        cameraPreset: 'lateral',
+        cameraDistanceScale: 1.08,
+        mriPlane: 'axial',
+        mriContrast: 'qdess-clinical',
+        mriZoom: 1.35,
+        flexionDeg: 8,
+        mriAnnotations: [
+          {
+            kind: 'edema',
+            centerRas: [129.0, 45.0, 12.0],
+            radiusMm: 7.5,
+            tone: 'amber',
+            label: 'Patellar Tendon–Condyle Pinch',
+          },
+        ],
+        whatToLookFor:
+          'Check the superolateral corner of Hoffa’s infrapatellar fat pad pinched strictly between the lateral border of the patellar tendon and the anterolateral femoral condyle.',
+        diagnosticRules: [
+          'Focal bright fluid-sensitive edema strictly localized to the superolateral corner of Hoffa’s fat pad.',
+          'Often associated with patella alta, increased TT-TG distance, and lateral patellar facet chondromalacia.',
+        ],
+        pitfallAndHook:
+          'Do not overlook focal superolateral Hoffa edema when menisci and ligaments are normal—it explains anterior lateral knee pain in young runners and maltrackers.',
+      },
+    ],
+    mriChecklist: [
+      'Trace the weight-bearing medial femoral condyle subchondral plate for a dark crescentic SIFK line.',
+      'Check if condylar marrow edema is paired with a posterior medial meniscal root tear or > 3 mm extrusion.',
+      'Always clear the superolateral Hoffa corner between patellar tendon and lateral trochlea for friction edema.',
+    ],
+    boardPearls: [
+      {
+        exam: 'SIFK vs AVN',
+        pearl: 'Focal linear dark subchondral band paralleling the condyle with huge edema and a torn medial root = SIFK; serpentine sclerotic double-line border = osteonecrosis.',
+      },
+    ],
+  },
 ];
 
 // Keep backward-compatible export name for existing tests/helpers
@@ -2436,7 +2694,7 @@ export const RESIDENT_QUIZ_QUESTIONS: ResidentQuizQuestion[] = [
     id: 'q3-meniscus-rule',
     kind: 'vignette',
     prompt: 'Sagittal MRI shows bright high signal inside the posterior horn medial meniscus that does NOT touch the top or bottom surface. What is your call?',
-    hint: 'Remember the Radiology Assistant Two-Slice Articular Surface Rule.',
+    hint: 'Remember the Two-Slice Articular Surface Rule.',
     moduleId: 'approach-sequences',
     viewMode3D: 'plateau-topdown',
     cameraPreset: 'plateau',

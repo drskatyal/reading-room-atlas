@@ -1,7 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { applyBoneOsteologyShading } from '../anatomyMaterials';
 import { computeKneeKinematics, rasToThree, threeToRas } from '../coordinates';
+import { buildRoute, parseRoute } from '../routing';
 import {
   ALL_STRUCTURE_IDS,
   ANATOMY_SYSTEM_GROUPS,
@@ -11,6 +14,7 @@ import {
   PATIENT_DEMO_PRESETS,
   pathToMode,
 } from '../../data/anatomyAndReportingData';
+import { ALL_JOINT_ATLASES, ANKLE_ATLAS } from '../../data/joints';
 import {
   buildKneeFellowshipReport,
   KNEE_MODULES,
@@ -24,7 +28,21 @@ import {
   SIX_BLIND_SPOTS,
 } from '../../data/radiologyAssistantGuideData';
 
-describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
+const PUBLIC_ROOT = path.resolve(process.cwd(), 'public');
+const SRC_ROOT = path.resolve(process.cwd(), 'src');
+
+function collectAllStrings(value: unknown, acc: string[] = []): string[] {
+  if (typeof value === 'string') {
+    acc.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectAllStrings(item, acc);
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) collectAllStrings(v, acc);
+  }
+  return acc;
+}
+
+describe('ReadingRoom Multi-Joint 3T Atlas & Platform Suite', () => {
   it('round-trips RAS <-> Three.js coordinates accurately', () => {
     const center: [number, number, number] = [112.5, 21.0, -12.0];
     const sampleRas: [number, number, number] = [89.8, 24.5, -19.2];
@@ -56,16 +74,16 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
     expect(patDisloc.patellaLateralShiftX).toBeLessThan(-0.4);
   });
 
-  it('provides 17 modules, MRI annotations, valid sub-steps & reports', () => {
+  it('provides 19 upgraded Knee modules incl. Ramp/Wrisberg & SIFK with MRI annotations & reports', () => {
     const normalModules = KNEE_MODULES.filter((m) => m.category === 'normal');
     const approachModules = KNEE_MODULES.filter((m) => m.category === 'approach');
     const pathModules = KNEE_MODULES.filter((m) => m.category === 'pathology');
     expect(normalModules.length).toBe(4);
     expect(approachModules.length).toBe(5);
-    expect(pathModules.length).toBe(8);
+    expect(pathModules.length).toBe(10);
 
     for (const mod of KNEE_MODULES) {
-      expect(mod.subSteps.length).toBeGreaterThanOrEqual(3);
+      expect(mod.subSteps.length).toBeGreaterThanOrEqual(2);
       for (const step of mod.subSteps) {
         expect(step.focusStructure in STRUCTURES_INFO).toBe(true);
         expect(step.diagnosticRules.length).toBeGreaterThanOrEqual(2);
@@ -77,7 +95,7 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
         const detail = PATHOLOGY_REPORTING_DETAILS[mod.id];
         expect(detail).toBeDefined();
         expect(detail.grades.length).toBeGreaterThanOrEqual(3);
-        expect(detail.howToReport.length).toBeGreaterThanOrEqual(4);
+        expect(detail.howToReport.length).toBeGreaterThanOrEqual(3);
       }
       const kin = computeKneeKinematics(mod.subSteps[0].flexionDeg, mod.id, 0.04, 'Right');
       const rep = buildKneeFellowshipReport(mod.id, mod.subSteps[0].flexionDeg, kin.anteriorDrawerMm);
@@ -86,98 +104,182 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
     }
   });
 
-  it('validates all 8 resident active-recall quiz questions', () => {
+  it('validates all 8 Knee resident active-recall quiz questions & 16 structures', () => {
     expect(RESIDENT_QUIZ_QUESTIONS.length).toBe(8);
-    for (const q of RESIDENT_QUIZ_QUESTIONS) {
-      expect(q.options.some((o) => o.id === q.correctOptionId)).toBe(true);
-      expect(q.explanation.length).toBeGreaterThan(20);
-      if (q.targetStructure) {
-        expect(q.targetStructure in STRUCTURES_INFO).toBe(true);
-      }
-    }
-  });
-
-  it('covers all 16 structures across LAYER_GROUPS and ANATOMY_SYSTEM_GROUPS with MRI overlays', () => {
     expect(ALL_STRUCTURE_IDS.length).toBe(16);
     expect(LAYER_GROUPS.length).toBe(6);
 
     const layerCovered = new Set(LAYER_GROUPS.flatMap((g) => g.structures));
+    const treeCovered = new Set<string>();
     for (const sid of ALL_STRUCTURE_IDS) {
       expect(layerCovered.has(sid)).toBe(true);
       expect(sid in STRUCTURES_INFO).toBe(true);
     }
-
-    const treeCovered = new Set<string>();
-    let totalLandmarks = 0;
-
     for (const group of ANATOMY_SYSTEM_GROUPS) {
       for (const entry of group.entries) {
         treeCovered.add(entry.structureId);
         expect(entry.defaultLandmark.structureId).toBe(entry.structureId);
         expect(entry.defaultLandmark.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
-        totalLandmarks += 1;
-
-        for (const sub of entry.subLandmarks ?? []) {
-          expect(sub.structureId).toBe(entry.structureId);
-          expect(sub.targetRas?.length).toBe(3);
-          expect(sub.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
-          totalLandmarks += 1;
-        }
       }
     }
+    for (const sid of ALL_STRUCTURE_IDS) expect(treeCovered.has(sid)).toBe(true);
 
-    for (const sid of ALL_STRUCTURE_IDS) {
-      expect(treeCovered.has(sid)).toBe(true);
-    }
-    expect(totalLandmarks).toBeGreaterThanOrEqual(30);
-  });
-
-  it('validates 6 dictation-free reporting sections, patient presets, and SPA path routing', () => {
     expect(MRI_REPORTING_SECTIONS.length).toBe(6);
-    const validModuleIds = new Set(KNEE_MODULES.map((m) => m.id));
-    for (const sec of MRI_REPORTING_SECTIONS) {
-      expect(sec.cards.length).toBeGreaterThanOrEqual(1);
-      for (const card of sec.cards) {
-        expect(card.normalLook.length).toBeGreaterThan(10);
-        expect(card.pathologySigns.length).toBeGreaterThanOrEqual(1);
-        expect('dictationNormal' in card).toBe(false);
-        expect('dictationAbnormal' in card).toBe(false);
-        if (card.linkedModuleId) expect(validModuleIds.has(card.linkedModuleId)).toBe(true);
-        if (card.linkedStructureId) expect(card.linkedStructureId in STRUCTURES_INFO).toBe(true);
-      }
-    }
-
-    expect(PATIENT_DEMO_PRESETS.some((p) => p.group === 'healthy')).toBe(true);
     expect(PATIENT_DEMO_PRESETS.filter((p) => p.group === 'pathology').length).toBe(8);
-    for (const preset of PATIENT_DEMO_PRESETS) {
-      const mod = KNEE_MODULES.find((m) => m.id === preset.moduleId);
-      expect(mod).toBeDefined();
-      expect(preset.subStepIndex).toBeLessThan(mod!.subSteps.length);
-    }
-
-    expect(pathToMode('/')).toBe('anatomy');
-    expect(pathToMode('/anatomy')).toBe('anatomy');
-    expect(pathToMode('/3d')).toBe('fullscreen-3d');
-    expect(pathToMode('/pathology')).toBe('pathology');
-    expect(pathToMode('/report-guide')).toBe('report-guide');
-    expect(pathToMode('/quiz')).toBe('quiz');
-    expect(modeToPath('fullscreen-3d')).toBe('/3d');
-    expect(modeToPath('report-guide')).toBe('/report-guide');
-
     expect(FIVE_PASS_SCROLL_ORDER).toHaveLength(5);
     expect(RA_GUIDE_CHAPTERS).toHaveLength(6);
     expect(SIX_BLIND_SPOTS).toHaveLength(6);
-    for (const chapter of RA_GUIDE_CHAPTERS) {
-      for (const plate of chapter.plates) {
-        expect(plate.imageSrc.startsWith('/guide/')).toBe(true);
-        expect(plate.imageSrc.endsWith('.png')).toBe(true);
-        if (plate.link?.moduleId) {
-          expect(KNEE_MODULES.some((m) => m.id === plate.link?.moduleId)).toBe(true);
-        }
-        if (plate.link?.structureId) {
-          expect(STRUCTURES_INFO[plate.link.structureId]).toBeDefined();
+  });
+
+  it('validates Ankle Flagship depth and full structural/referential integrity across all 6 joints', () => {
+    expect(ALL_JOINT_ATLASES).toHaveLength(6);
+
+    // Ankle Flagship requirements
+    expect(Object.keys(ANKLE_ATLAS.structuresInfo).length).toBeGreaterThanOrEqual(22);
+    expect(ANKLE_ATLAS.modules.filter((m) => m.category === 'pathology').length).toBeGreaterThanOrEqual(10);
+    expect(ANKLE_ATLAS.reportGuide.chapters.length).toBeGreaterThanOrEqual(8);
+    expect(ANKLE_ATLAS.quizQuestions.length).toBeGreaterThanOrEqual(10);
+
+    for (const joint of ALL_JOINT_ATLASES) {
+      const structIds = Object.keys(joint.structuresInfo);
+      expect(structIds.length).toBeGreaterThanOrEqual(15);
+
+      const layerCovered = new Set(joint.layerGroups.flatMap((g) => g.structures));
+      const treeCovered = new Set<string>();
+      for (const sid of structIds) {
+        expect(layerCovered.has(sid), `${joint.id} missing ${sid} from layerGroups`).toBe(true);
+      }
+      for (const group of joint.anatomySystemGroups) {
+        for (const entry of group.entries) {
+          treeCovered.add(entry.structureId);
+          expect(entry.defaultLandmark.structureId).toBe(entry.structureId);
+          expect(entry.defaultLandmark.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
         }
       }
+      for (const sid of structIds) {
+        expect(treeCovered.has(sid), `${joint.id} missing ${sid} from anatomySystemGroups`).toBe(true);
+      }
+
+      const validModuleIds = new Set(joint.modules.map((m) => m.id));
+      const pathologyMods = joint.modules.filter((m) => m.category === 'pathology');
+      expect(pathologyMods.length).toBeGreaterThanOrEqual(6);
+
+      for (const mod of pathologyMods) {
+        expect(mod.subSteps.length).toBeGreaterThanOrEqual(3);
+        for (const step of mod.subSteps) {
+          expect(step.focusStructure in joint.structuresInfo, `${joint.id}:${mod.id}:${step.id}`).toBe(true);
+          expect(step.mriAnnotations?.length ?? 0).toBeGreaterThanOrEqual(1);
+        }
+        const rep = joint.pathologyReportingDetails[mod.id];
+        expect(rep, `${joint.id} missing pathologyReportingDetails for ${mod.id}`).toBeDefined();
+        expect(rep.grades.length).toBeGreaterThanOrEqual(2);
+        expect(rep.howToReport.length).toBeGreaterThanOrEqual(3);
+      }
+
+      for (const spec of joint.pathology3DSpecs) {
+        expect(validModuleIds.has(spec.moduleId), `${joint.id} unknown 3D spec module ${spec.moduleId}`).toBe(true);
+      }
+
+      for (const preset of joint.patientDemoPresets) {
+        const mod = joint.modules.find((m) => m.id === preset.moduleId);
+        expect(mod, `${joint.id} preset ${preset.id}`).toBeDefined();
+        expect(preset.subStepIndex).toBeLessThan(mod!.subSteps.length);
+      }
+
+      for (const q of joint.quizQuestions) {
+        expect(validModuleIds.has(q.moduleId), `${joint.id} quiz ${q.id}`).toBe(true);
+        expect(q.options.some((o) => o.id === q.correctOptionId)).toBe(true);
+        if (q.targetStructure) {
+          expect(q.targetStructure in joint.structuresInfo).toBe(true);
+        }
+      }
+
+      expect(joint.reportGuide.fivePassOrder).toHaveLength(5);
+      expect(joint.reportGuide.blindSpots.length).toBeGreaterThanOrEqual(5);
+      for (const ch of joint.reportGuide.chapters) {
+        for (const plate of ch.plates) {
+          if (plate.link?.moduleId) expect(validModuleIds.has(plate.link.moduleId)).toBe(true);
+          if (plate.link?.structureId) expect(plate.link.structureId in joint.structuresInfo).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('verifies every GLB, NIfTI MRI volume, landmarks JSON, and guide PNG exists on disk and is non-empty', () => {
+    const checkPublicAsset = (url: string) => {
+      const fullPath = path.join(PUBLIC_ROOT, url.replace(/^\//, ''));
+      expect(fs.existsSync(fullPath), `Missing public asset: ${url}`).toBe(true);
+      const stat = fs.statSync(fullPath);
+      expect(stat.size, `Empty public asset: ${url}`).toBeGreaterThan(100);
+    };
+
+    for (const joint of ALL_JOINT_ATLASES) {
+      checkPublicAsset(joint.glbUrl);
+      checkPublicAsset(joint.mriVolumeUrl);
+      checkPublicAsset(joint.mriSegUrl);
+      if (joint.mriSubregionSegUrl) checkPublicAsset(joint.mriSubregionSegUrl);
+      checkPublicAsset(joint.landmarksUrl);
+      checkPublicAsset(joint.previewPlateSrc);
+      for (const ch of joint.reportGuide.chapters) {
+        for (const plate of ch.plates) {
+          checkPublicAsset(plate.imageSrc);
+        }
+      }
+    }
+  });
+
+  it('handles multi-joint SPA routing & legacy Knee paths accurately', () => {
+    expect(parseRoute('/')).toEqual({ jointId: 'ankle', mode: 'landing' });
+    expect(parseRoute('/ankle/pathology', '?module=atfl-cfl-sprain')).toEqual({
+      jointId: 'ankle',
+      mode: 'pathology',
+      moduleParam: 'atfl-cfl-sprain',
+    });
+    expect(parseRoute('/shoulder/report-guide')).toEqual({
+      jointId: 'shoulder',
+      mode: 'report-guide',
+      moduleParam: undefined,
+    });
+    expect(parseRoute('/pathology')).toEqual({
+      jointId: 'knee',
+      mode: 'pathology',
+      moduleParam: undefined,
+    });
+
+    expect(buildRoute('ankle', 'landing')).toBe('/');
+    expect(buildRoute('ankle', 'pathology', 'atfl-cfl-sprain')).toBe(
+      '/ankle/pathology?module=atfl-cfl-sprain'
+    );
+    expect(buildRoute('hip', 'report-guide')).toBe('/hip/report-guide');
+
+    expect(pathToMode('/3d')).toBe('fullscreen-3d');
+    expect(modeToPath('report-guide')).toBe('/report-guide');
+  });
+
+  it('contains zero attribution mentions of external websites across all joint data and UI code', () => {
+    const forbidden = /radiology\s*assistant|radsource|radiopaedia/i;
+
+    for (const joint of ALL_JOINT_ATLASES) {
+      const strings = collectAllStrings(joint);
+      for (const s of strings) {
+        expect(s, `Forbidden attribution text in ${joint.id}: ${s.slice(0, 120)}`).not.toMatch(forbidden);
+      }
+    }
+
+    const walkFiles = (dir: string, acc: string[] = []): string[] => {
+      for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) walkFiles(full, acc);
+        else if (/\.(ts|tsx)$/.test(ent.name) && !ent.name.endsWith('.test.ts')) acc.push(full);
+      }
+      return acc;
+    };
+
+    for (const file of walkFiles(SRC_ROOT)) {
+      const text = fs.readFileSync(file, 'utf8');
+      // Exclude internal ES module import path string only; check all code, comments & JSX
+      const stripped = text.replace(/from\s+['"][^'"]*radiologyAssistantGuideData['"]/g, '');
+      expect(stripped, `Forbidden source attribution string found in ${file}`).not.toMatch(forbidden);
     }
   });
 

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { CheckCircle2, ChevronLeft, ChevronRight, HelpCircle, RotateCcw, XCircle } from 'lucide-react';
-import { RESIDENT_QUIZ_QUESTIONS } from '../data/kneeClinicalAtlas';
 import type { ResidentQuizQuestion } from '../types/atlas';
 
 interface EditorialGuidePanelProps {
+  quizQuestions: ResidentQuizQuestion[];
   quizQuestion: ResidentQuizQuestion;
   quizIndex: number;
   quizAnswers: Record<string, string>;
@@ -13,6 +13,7 @@ interface EditorialGuidePanelProps {
 }
 
 export function EditorialGuidePanel({
+  quizQuestions,
   quizQuestion,
   quizIndex,
   quizAnswers,
@@ -22,11 +23,11 @@ export function EditorialGuidePanel({
 }: EditorialGuidePanelProps) {
   const [hintShown, setHintShown] = useState(false);
 
-  const total = RESIDENT_QUIZ_QUESTIONS.length;
+  const total = quizQuestions.length;
   const selectedId = quizAnswers[quizQuestion.id];
   const answered = selectedId !== undefined;
   const isCorrect = answered && selectedId === quizQuestion.correctOptionId;
-  const correctCount = RESIDENT_QUIZ_QUESTIONS.filter(
+  const correctCount = quizQuestions.filter(
     (q) => quizAnswers[q.id] === q.correctOptionId
   ).length;
   const answeredCount = Object.keys(quizAnswers).length;
@@ -78,7 +79,7 @@ export function EditorialGuidePanel({
         </div>
 
         <div className="quiz-q-pills">
-          {RESIDENT_QUIZ_QUESTIONS.map((q, idx) => {
+          {quizQuestions.map((q, idx) => {
             const c = quizAnswers[q.id];
             const ok = c !== undefined && c === q.correctOptionId;
             const bad = c !== undefined && c !== q.correctOptionId;

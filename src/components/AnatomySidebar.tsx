@@ -8,10 +8,9 @@ import {
   Search,
   Tags,
 } from 'lucide-react';
-import { ANATOMY_SYSTEM_GROUPS, LAYER_GROUPS } from '../data/anatomyAndReportingData';
-import { STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
   AnatomyLandmarkItem,
+  JointAtlasDefinition,
   LayerSelectMode,
   MriOverlayMode,
   StructureId,
@@ -19,6 +18,7 @@ import type {
 } from '../types/atlas';
 
 interface AnatomySidebarProps {
+  jointDef: JointAtlasDefinition;
   activeLandmark: AnatomyLandmarkItem;
   activeStructure: StructureId;
   onSelectLandmark: (item: AnatomyLandmarkItem) => void;
@@ -37,13 +37,8 @@ interface AnatomySidebarProps {
   onChangeMriOverlayMode: (mode: MriOverlayMode) => void;
 }
 
-const MRI_OVERLAY_OPTIONS: Array<{ id: MriOverlayMode; label: string }> = [
-  { id: 'none', label: 'Off' },
-  { id: 'atlas', label: '16' },
-  { id: 'subregions', label: 'Sub' },
-];
-
 export function AnatomySidebar({
+  jointDef,
   activeLandmark,
   activeStructure,
   onSelectLandmark,
@@ -66,22 +61,44 @@ export function AnatomySidebar({
   const [expandedStructures, setExpandedStructures] = useState<Record<string, boolean>>({});
 
   const normalizedQuery = query.trim().toLowerCase();
+  const totalCount = useMemo(
+    () =>
+      jointDef.anatomySystemGroups.reduce((acc, g) => acc + g.entries.length, 0),
+    [jointDef]
+  );
+
+  const mriOverlayOptions: Array<{ id: MriOverlayMode; label: string }> = useMemo(
+    () =>
+      jointDef.supportsSubregionOverlay
+        ? [
+            { id: 'none', label: 'Off' },
+            { id: 'atlas', label: String(totalCount) },
+            { id: 'subregions', label: 'Sub' },
+          ]
+        : [
+            { id: 'none', label: 'Off' },
+            { id: 'atlas', label: 'Labels' },
+          ],
+    [jointDef.supportsSubregionOverlay, totalCount]
+  );
 
   const filteredGroups = useMemo(() => {
-    if (!normalizedQuery) return ANATOMY_SYSTEM_GROUPS;
-    return ANATOMY_SYSTEM_GROUPS.map((group) => {
-      const groupMatches = group.title.toLowerCase().includes(normalizedQuery);
-      const matchingEntries = group.entries.filter((entry) => {
-        if (groupMatches || entry.label.toLowerCase().includes(normalizedQuery)) {
-          return true;
-        }
-        return (entry.subLandmarks ?? []).some((sub) =>
-          sub.label.toLowerCase().includes(normalizedQuery)
-        );
-      });
-      return { ...group, entries: matchingEntries };
-    }).filter((g) => g.entries.length > 0);
-  }, [normalizedQuery]);
+    if (!normalizedQuery) return jointDef.anatomySystemGroups;
+    return jointDef.anatomySystemGroups
+      .map((group) => {
+        const groupMatches = group.title.toLowerCase().includes(normalizedQuery);
+        const matchingEntries = group.entries.filter((entry) => {
+          if (groupMatches || entry.label.toLowerCase().includes(normalizedQuery)) {
+            return true;
+          }
+          return (entry.subLandmarks ?? []).some((sub) =>
+            sub.label.toLowerCase().includes(normalizedQuery)
+          );
+        });
+        return { ...group, entries: matchingEntries };
+      })
+      .filter((g) => g.entries.length > 0);
+  }, [jointDef.anatomySystemGroups, normalizedQuery]);
 
   const handleStructureClick = (item: AnatomyLandmarkItem) => {
     onSelectLandmark(item);
@@ -90,10 +107,10 @@ export function AnatomySidebar({
     }
   };
 
-  const structInfo = STRUCTURES_INFO[activeStructure];
+  const structInfo = jointDef.structuresInfo[activeStructure];
 
   return (
-    <aside className="mode-sidebar" aria-label="3D and MRI anatomy outliner">
+    <aside className="mode-sidebar" aria-label={`3D and MRI ${jointDef.shortName} anatomy outliner`}>
       {/* Compact Layer Controls + MRI Color Sync */}
       <div className="sidebar-sticky-head">
         <div className="tool-row-head">
@@ -121,7 +138,7 @@ export function AnatomySidebar({
               type="button"
               className="reset-link-btn"
               onClick={onEnableAllStructures}
-              title="Show all 16 anatomical structures"
+              title={`Show all ${totalCount} anatomical structures`}
             >
               <RotateCcw size={11} />
               <span>All</span>
@@ -131,7 +148,7 @@ export function AnatomySidebar({
 
         {/* 3x2 Compact Layer Chips (Check multiple or isolate single) */}
         <div className="layer-chips-grid">
-          {LAYER_GROUPS.map((lg) => {
+          {jointDef.layerGroups.map((lg) => {
             const onCount = lg.structures.filter((sid) => enabledStructures.has(sid)).length;
             const active =
               layerMode === 'single'
@@ -159,7 +176,7 @@ export function AnatomySidebar({
             type="button"
             className={`mini-chip ${xrayBones ? 'active' : ''}`}
             onClick={onToggleXrayBones}
-            title="Make femur & tibia translucent to see internal ligaments"
+            title="Make bones translucent to see internal ligaments"
           >
             <Scan size={11} />
             <span>X-Ray</span>
@@ -168,10 +185,11 @@ export function AnatomySidebar({
           <div className="inline-mri-map" title="MRI Color Segmentation Overlay">
             <Palette size={11} className="inline-mri-icon" />
             <div className="segmented-pill mini-seg" role="group" aria-label="MRI color overlay">
-              {MRI_OVERLAY_OPTIONS.map((opt) => (
+              {mriOverlayOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
+                  aria-pressed={mriOverlayMode === opt.id}
                   className={`pill-btn ${mriOverlayMode === opt.id ? 'active' : ''}`}
                   onClick={() => onChangeMriOverlayMode(opt.id)}
                 >

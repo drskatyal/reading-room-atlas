@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { rasToThree } from './coordinates';
 import type {
+  JointAtlasDefinition,
   KneeKinematics,
+  KneeLandmarks,
   KneeModuleId,
   MeniscalTearMorphology,
   TissueVisibility,
@@ -87,8 +90,8 @@ function makeSoftBruiseSphere(
 
 /**
  * Builds anatomically registered 3D pathology overlays derived directly from the
- * loaded GLB bone/meniscus/cartilage bounding geometry so every Radiology Assistant
- * pathology module exhibits crisp, interactive 3D structure + lesions.
+ * loaded GLB bone/meniscus/cartilage bounding geometry so every pathology module
+ * exhibits crisp, interactive 3D structure and lesion markers.
  */
 export function createPathologyOverlaySystem(
   ctx: PathologyOverlayContext
@@ -483,9 +486,186 @@ export function createPathologyOverlaySystem(
       if (moduleId === 'chondral-oa' && femCartVis && subStepId !== 'oa-map') {
         chondralMarker.visible = true;
       }
+
+      if (moduleId === 'ramp-wrisberg' && medMenVis) {
+        rampMesh.visible = true;
+      }
     },
 
     dispose() {
+      for (const g of geometries) g.dispose();
+      for (const m of materials) m.dispose();
+    },
+  };
+}
+
+/**
+ * Declarative 3D lesion overlay builder for all joint atlases (Ankle, Knee extensions,
+ * Shoulder, Wrist, Elbow, Hip) using physical RAS coordinates registered to the active
+ * joint specimen GLB.
+ */
+export function createDeclarativePathologySystem(
+  jointDef: JointAtlasDefinition,
+  landmarks: KneeLandmarks | null,
+  proximalGroup: THREE.Group,
+  distalGroup: THREE.Group
+): PathologyOverlaySystem {
+  const specs = jointDef.pathology3DSpecs ?? [];
+  const geometries: THREE.BufferGeometry[] = [];
+  const materials: THREE.Material[] = [];
+
+  const jointCenter = landmarks?.jointCenterRas ?? jointDef.defaultMriSliceRas;
+  const scale = landmarks?.threeScale ?? 0.04;
+
+  const matBruiseCrimson = new THREE.MeshPhysicalMaterial({
+    color: 0xf43f5e,
+    emissive: 0x9f1239,
+    emissiveIntensity: 0.62,
+    roughness: 0.36,
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+  });
+  const matBruiseAmber = new THREE.MeshPhysicalMaterial({
+    color: 0xf59e0b,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.56,
+    roughness: 0.36,
+    transparent: true,
+    opacity: 0.74,
+    depthWrite: false,
+  });
+  const matTearCrimson = new THREE.MeshPhysicalMaterial({
+    color: 0xfb7185,
+    emissive: 0xbe123c,
+    emissiveIntensity: 0.78,
+    roughness: 0.28,
+    clearcoat: 0.45,
+    side: THREE.DoubleSide,
+  });
+  const matTearAmber = new THREE.MeshPhysicalMaterial({
+    color: 0xfbbf24,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.7,
+    roughness: 0.3,
+    clearcoat: 0.4,
+    side: THREE.DoubleSide,
+  });
+  const matCystCyan = new THREE.MeshPhysicalMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.58,
+    roughness: 0.14,
+    clearcoat: 0.92,
+    transparent: true,
+    opacity: 0.84,
+  });
+  const matFragment = new THREE.MeshPhysicalMaterial({
+    color: 0xfef3c7,
+    emissive: 0xd97706,
+    emissiveIntensity: 0.52,
+    roughness: 0.38,
+    clearcoat: 0.28,
+  });
+
+  materials.push(
+    matBruiseCrimson,
+    matBruiseAmber,
+    matTearCrimson,
+    matTearAmber,
+    matCystCyan,
+    matFragment
+  );
+
+  interface EntryGroup {
+    moduleId: string;
+    subStepId?: string;
+    group: THREE.Group;
+  }
+  const built: EntryGroup[] = [];
+
+  for (const spec of specs) {
+    if (!spec.primitives.length) continue;
+    const proxG = new THREE.Group();
+    const distG = new THREE.Group();
+    proxG.visible = false;
+    distG.visible = false;
+
+    for (const prim of spec.primitives) {
+      const targetParent = prim.parent === 'distal' ? distG : proxG;
+
+      if (prim.kind === 'bruise' || prim.kind === 'cyst-effusion') {
+        const p = rasToThree(prim.centerRas, jointCenter, scale);
+        const geo = new THREE.SphereGeometry(1, 22, 16);
+        geometries.push(geo);
+        const mat =
+          prim.kind === 'cyst-effusion'
+            ? prim.tone === 'amber'
+              ? matBruiseAmber
+              : prim.tone === 'crimson'
+                ? matBruiseCrimson
+                : matCystCyan
+            : prim.tone === 'amber'
+              ? matBruiseAmber
+              : matBruiseCrimson;
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(p[0], p[1], p[2]);
+        m.scale.set(
+          Math.max(0.05, prim.radiiMm[0] * scale),
+          Math.max(0.05, prim.radiiMm[2] * scale),
+          Math.max(0.05, prim.radiiMm[1] * scale)
+        );
+        targetParent.add(m);
+      } else if (prim.kind === 'fragment') {
+        const p = rasToThree(prim.centerRas, jointCenter, scale);
+        const geo = new THREE.DodecahedronGeometry(1, 1);
+        geometries.push(geo);
+        const m = new THREE.Mesh(geo, prim.tone === 'crimson' ? matTearCrimson : matFragment);
+        m.position.set(p[0], p[1], p[2]);
+        m.scale.set(
+          Math.max(0.05, prim.radiiMm[0] * scale),
+          Math.max(0.05, prim.radiiMm[2] * scale),
+          Math.max(0.05, prim.radiiMm[1] * scale)
+        );
+        targetParent.add(m);
+      } else if (prim.kind === 'tear-cleft' && prim.pointsRas.length >= 2) {
+        const pts = prim.pointsRas.map((r) => {
+          const v = rasToThree(r, jointCenter, scale);
+          return new THREE.Vector3(v[0], v[1], v[2]);
+        });
+        const curve = new THREE.CatmullRomCurve3(pts);
+        const rad = Math.max(0.025, (prim.radiusMm ?? 1.6) * scale);
+        const geo = new THREE.TubeGeometry(curve, 24, rad, 10, false);
+        geometries.push(geo);
+        const m = new THREE.Mesh(geo, prim.tone === 'amber' ? matTearAmber : matTearCrimson);
+        targetParent.add(m);
+      }
+    }
+
+    if (proxG.children.length > 0) {
+      proximalGroup.add(proxG);
+      built.push({ moduleId: spec.moduleId, subStepId: spec.subStepId, group: proxG });
+    }
+    if (distG.children.length > 0) {
+      distalGroup.add(distG);
+      built.push({ moduleId: spec.moduleId, subStepId: spec.subStepId, group: distG });
+    }
+  }
+
+  return {
+    update(state: PathologyUpdateState) {
+      const pulse = 0.46 + 0.16 * Math.sin(state.elapsedSec * 2.8);
+      matTearCrimson.emissiveIntensity = pulse + 0.22;
+      matBruiseCrimson.emissiveIntensity = pulse + 0.1;
+      for (const b of built) {
+        b.group.visible =
+          b.moduleId === state.moduleId && (!b.subStepId || b.subStepId === state.subStepId);
+      }
+    },
+    dispose() {
+      for (const b of built) {
+        b.group.parent?.remove(b.group);
+      }
       for (const g of geometries) g.dispose();
       for (const m of materials) m.dispose();
     },

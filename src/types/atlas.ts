@@ -1,34 +1,15 @@
-export type StructureId =
-  | 'Femur'
-  | 'Tibia'
-  | 'Fibula'
-  | 'Patella'
-  | 'FemoralCartilage'
-  | 'MedialTibialCartilage'
-  | 'LateralTibialCartilage'
-  | 'PatellarCartilage'
-  | 'MedialMeniscus'
-  | 'LateralMeniscus'
-  | 'ACL'
-  | 'PCL'
-  | 'MCL'
-  | 'LCL'
-  | 'PatellarTendon'
-  | 'QuadricepsTendon';
+export type JointId = 'ankle' | 'knee' | 'shoulder' | 'wrist' | 'elbow' | 'hip';
 
-export type TissueGroup =
-  | 'bone'
-  | 'cartilage'
-  | 'meniscus'
-  | 'cruciate'
-  | 'collateral'
-  | 'extensor';
+export type StructureId = string;
+
+export type TissueGroup = string;
 
 export type MriContrastPreset =
   | 'qdess-clinical'
   | 'meniscus-cruciate'
   | 'chondral'
-  | 'trabecular';
+  | 'trabecular'
+  | (string & {});
 
 export type MriOverlayMode = 'none' | 'atlas' | 'subregions';
 
@@ -36,26 +17,9 @@ export type MriPlaneMode = 'sagittal' | 'coronal' | 'axial' | 'multiplanar';
 
 export type ModuleCategory = 'normal' | 'approach' | 'pathology';
 
-export type KneeModuleId =
-  | 'normal-overview'
-  | 'normal-menisci'
-  | 'normal-cruciates'
-  | 'normal-collaterals-extensor'
-  | 'approach-sequences'
-  | 'approach-sag-menisci'
-  | 'approach-sag-cruciates'
-  | 'approach-coronal'
-  | 'approach-axial'
-  | 'meniscal-tears-3d'
-  | 'bucket-handle'
-  | 'posterior-root'
-  | 'acl-rupture'
-  | 'pcl-dashboard'
-  | 'unhappy-triad'
-  | 'patellar-dislocation'
-  | 'chondral-oa';
-
-export type KneeChapterId = KneeModuleId;
+export type ModuleId = string;
+export type KneeModuleId = ModuleId;
+export type KneeChapterId = ModuleId;
 
 export type SpecimenViewMode =
   | 'solid'
@@ -82,6 +46,7 @@ export type ThemeMode = 'darkroom' | 'monograph';
 export type LayerSelectMode = 'multiple' | 'single';
 
 export type AppWorkspaceMode =
+  | 'landing'
   | 'anatomy'
   | 'fullscreen-3d'
   | 'pathology'
@@ -340,4 +305,225 @@ export interface PatientDemoPreset {
   patientTitle: string;
   patientSummary: string;
   clinicalSummary: string;
+}
+
+export interface PathologyReportingDetail {
+  mechanism: string;
+  sequencesAndPlanes: string;
+  gradingTitle: string;
+  grades: Array<{ label: string; detail: string }>;
+  howToReport: string[];
+  surgicalNote: string;
+}
+
+export type GuideTone = 'cyan' | 'amber' | 'crimson' | 'emerald';
+
+export type GuidePlateAnnotation =
+  | {
+      kind: 'arrow';
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      tone: GuideTone;
+      label?: string;
+      lx?: number;
+      ly?: number;
+    }
+  | {
+      kind: 'line';
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      tone: GuideTone;
+      dashed?: boolean;
+      label?: string;
+      lx?: number;
+      ly?: number;
+    }
+  | {
+      kind: 'zone';
+      cx: number;
+      cy: number;
+      rx: number;
+      ry: number;
+      rotate?: number;
+      tone: GuideTone;
+      label?: string;
+      lx?: number;
+      ly?: number;
+    }
+  | {
+      kind: 'caliper';
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      tone: GuideTone;
+      label: string;
+      lx?: number;
+      ly?: number;
+    };
+
+export interface GuideFigurePlate {
+  id: string;
+  figureLabel: string;
+  imageSrc: string;
+  alt: string;
+  viewBox?: string;
+  annotations: GuidePlateAnnotation[];
+  caption: string;
+  link?: {
+    label: string;
+    mode: 'anatomy' | 'pathology';
+    moduleId?: KneeModuleId;
+    structureId?: StructureId;
+  };
+}
+
+export interface GuideSubSection {
+  heading?: string;
+  paragraphs?: string[];
+  bullets?: Array<{ lead: string; text: string }>;
+  table?: {
+    columns: [string, string];
+    rows: Array<[string, string]>;
+  };
+  pitfall?: string;
+}
+
+export interface RaGuideChapter {
+  id: string;
+  number: string;
+  title: string;
+  lead: string;
+  subsections: GuideSubSection[];
+  plates: GuideFigurePlate[];
+}
+
+export type Pathology3DPrimitive =
+  | {
+      kind: 'bruise';
+      centerRas: [number, number, number];
+      radiiMm: [number, number, number];
+      tone?: 'crimson' | 'amber';
+      parent?: 'proximal' | 'distal';
+    }
+  | {
+      kind: 'tear-cleft';
+      pointsRas: Array<[number, number, number]>;
+      radiusMm?: number;
+      tone?: 'crimson' | 'amber';
+      parent?: 'proximal' | 'distal';
+    }
+  | {
+      kind: 'cyst-effusion';
+      centerRas: [number, number, number];
+      radiiMm: [number, number, number];
+      tone?: 'cyan' | 'amber' | 'crimson';
+      parent?: 'proximal' | 'distal';
+    }
+  | {
+      kind: 'fragment';
+      centerRas: [number, number, number];
+      radiiMm: [number, number, number];
+      tone?: 'amber' | 'crimson';
+      parent?: 'proximal' | 'distal';
+    };
+
+export interface JointPathology3DSpec {
+  moduleId: string;
+  subStepId?: string;
+  damagedStructures?: string[];
+  primitives: Pathology3DPrimitive[];
+}
+
+export interface JointCameraPreset {
+  label: string;
+  pos: [number, number, number];
+  target: [number, number, number];
+}
+
+export interface LayerGroupConfig {
+  id: TissueGroup;
+  label: string;
+  structures: StructureId[];
+}
+
+export interface ContrastPresetConfig {
+  id: MriContrastPreset;
+  label: string;
+  shortLabel: string;
+  spec: string;
+  defaultMin: number;
+  defaultMax: number;
+}
+
+export interface JointKinematicConfig {
+  sliderLabel: string;
+  minDeg: number;
+  maxDeg: number;
+  defaultDeg: number;
+  pivotFallback: [number, number, number];
+  axisFallback: [number, number, number];
+  movingStructures: string[];
+  patellaStructures?: string[];
+  medialMeniscusStructures?: string[];
+  motionModules?: string[];
+}
+
+export interface JointReportGuideConfig {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  fivePassOrder: Array<{ step: string; title: string; detail: string }>;
+  chapters: RaGuideChapter[];
+  blindSpotsTitle: string;
+  blindSpotsLead: string;
+  blindSpots: Array<{ title: string; check: string }>;
+}
+
+export interface JointAtlasDefinition {
+  id: JointId;
+  name: string;
+  shortName: string;
+  scannerBadge: string;
+  featuredBadge?: string;
+  tagline: string;
+  heroSummary: string;
+  clinicalHighlights: string[];
+  previewPlateSrc: string;
+  glbUrl: string;
+  mriVolumeUrl: string;
+  mriSegUrl: string;
+  mriSubregionSegUrl?: string;
+  landmarksUrl: string;
+  mriSpecLabel: string;
+  mriSliceTitle: string;
+  supportsSubregionOverlay?: boolean;
+  supportsPlateauView?: boolean;
+  supportsCartilageMap?: boolean;
+  cartilageMaxMmLabel?: string;
+  defaultMriSliceRas: [number, number, number];
+  cameraPresets: Record<CameraPresetKey, JointCameraPreset>;
+  allPinStructures: StructureId[];
+  boneNames: string[];
+  cartilageNames: string[];
+  fibrocartilageNames: string[];
+  ligamentNames: string[];
+  tendonNames: string[];
+  nerveBursaNames?: string[];
+  xrayHiddenStructures?: string[];
+  kinematicConfig: JointKinematicConfig;
+  layerGroups: LayerGroupConfig[];
+  anatomySystemGroups: AnatomySystemGroup[];
+  structuresInfo: Record<string, StructureClinicalInfo>;
+  mriContrastPresets: ContrastPresetConfig[];
+  modules: KneeModule[];
+  pathologyReportingDetails: Record<string, PathologyReportingDetail>;
+  patientDemoPresets: PatientDemoPreset[];
+  quizQuestions: ResidentQuizQuestion[];
+  reportGuide: JointReportGuideConfig;
+  pathology3DSpecs: JointPathology3DSpec[];
 }

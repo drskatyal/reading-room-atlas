@@ -8,12 +8,8 @@ import {
   Minimize,
   RotateCcw,
 } from 'lucide-react';
-import {
-  ANATOMY_SYSTEM_GROUPS,
-  LAYER_GROUPS,
-  PATIENT_DEMO_PRESETS,
-} from '../data/anatomyAndReportingData';
 import type {
+  JointAtlasDefinition,
   LayerSelectMode,
   PatientDemoPreset,
   StructureId,
@@ -21,6 +17,7 @@ import type {
 } from '../types/atlas';
 
 interface FullScreen3DOverlayProps {
+  jointDef: JointAtlasDefinition;
   hostElement: HTMLDivElement | null;
   activePresetId: string;
   onSelectPreset: (preset: PatientDemoPreset) => void;
@@ -40,6 +37,7 @@ interface FullScreen3DOverlayProps {
 }
 
 export function FullScreen3DOverlay({
+  jointDef,
   hostElement,
   activePresetId,
   onSelectPreset,
@@ -61,9 +59,13 @@ export function FullScreen3DOverlay({
   const [layersOpen, setLayersOpen] = useState(false);
   const [isMonitorFullscreen, setIsMonitorFullscreen] = useState(false);
 
-  const activePreset =
-    PATIENT_DEMO_PRESETS.find((p) => p.id === activePresetId) ?? PATIENT_DEMO_PRESETS[0];
+  const presets = jointDef.patientDemoPresets;
+  const activePreset = presets.find((p) => p.id === activePresetId) ?? presets[0];
   const isPatella = moduleId === 'patellar-dislocation';
+  const totalStructures = jointDef.anatomySystemGroups.reduce(
+    (acc, g) => acc + g.entries.length,
+    0
+  );
 
   const handleBrowserFullscreen = async () => {
     if (!hostElement) return;
@@ -101,11 +103,11 @@ export function FullScreen3DOverlay({
               className="fs-select-input"
               value={activePreset.id}
               onChange={(e) => {
-                const found = PATIENT_DEMO_PRESETS.find((p) => p.id === e.target.value);
+                const found = presets.find((p) => p.id === e.target.value);
                 if (found) onSelectPreset(found);
               }}
             >
-              {PATIENT_DEMO_PRESETS.map((p) => (
+              {presets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
@@ -116,11 +118,11 @@ export function FullScreen3DOverlay({
           <p className="fs-inline-summary">{activePreset.patientSummary}</p>
 
           <label className="fs-motion-row">
-            <span>{isPatella ? 'Patella Slip' : 'Knee Bend'}</span>
+            <span>{isPatella ? 'Patella Slip' : jointDef.kinematicConfig.sliderLabel}</span>
             <input
               type="range"
-              min={0}
-              max={isPatella ? 1 : 90}
+              min={isPatella ? 0 : jointDef.kinematicConfig.minDeg}
+              max={isPatella ? 1 : jointDef.kinematicConfig.maxDeg}
               step={isPatella ? 0.05 : 2}
               value={isPatella ? patellaSubluxation : flexionDeg}
               onChange={(e) =>
@@ -128,7 +130,7 @@ export function FullScreen3DOverlay({
                   ? onChangePatellaSubluxation(Number(e.target.value))
                   : onChangeFlexionDeg(Number(e.target.value))
               }
-              aria-label="3D knee motion control"
+              aria-label={`3D ${jointDef.shortName.toLowerCase()} motion control`}
             />
             <strong>
               {isPatella ? `${Math.round(patellaSubluxation * 100)}%` : `${flexionDeg}°`}
@@ -142,7 +144,7 @@ export function FullScreen3DOverlay({
               onClick={() => setLayersOpen((v) => !v)}
             >
               <Layers size={11} />
-              <span>Layers ({enabledStructures.size}/16)</span>
+              <span>Layers ({enabledStructures.size}/{totalStructures})</span>
             </button>
 
             <div className="segmented-pill mini-seg">
@@ -175,7 +177,7 @@ export function FullScreen3DOverlay({
           {layersOpen && (
             <div className="fs-layers-scroll">
               <div className="layer-chips-grid">
-                {LAYER_GROUPS.map((lg) => {
+                {jointDef.layerGroups.map((lg) => {
                   const onCount = lg.structures.filter((sid) => enabledStructures.has(sid)).length;
                   const active = onCount > 0;
                   return (
@@ -193,7 +195,7 @@ export function FullScreen3DOverlay({
               </div>
 
               <div className="fs-struct-switches">
-                {ANATOMY_SYSTEM_GROUPS.flatMap((g) => g.entries).map((entry) => {
+                {jointDef.anatomySystemGroups.flatMap((g) => g.entries).map((entry) => {
                   const on = enabledStructures.has(entry.structureId);
                   return (
                     <div key={entry.structureId} className="outliner-item-row compact">

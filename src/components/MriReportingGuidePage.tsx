@@ -1,14 +1,14 @@
 import { ArrowUpRight } from 'lucide-react';
-import {
-  FIVE_PASS_SCROLL_ORDER,
-  RA_GUIDE_CHAPTERS,
-  SIX_BLIND_SPOTS,
-  type GuideFigurePlate,
-  type GuideTone,
-} from '../data/radiologyAssistantGuideData';
-import type { KneeModuleId, StructureId } from '../types/atlas';
+import type {
+  GuideFigurePlate,
+  GuideTone,
+  JointAtlasDefinition,
+  KneeModuleId,
+  StructureId,
+} from '../types/atlas';
 
 interface MriReportingGuidePageProps {
+  jointDef: JointAtlasDefinition;
   onJumpToModule: (
     mode: 'anatomy' | 'pathology',
     moduleId?: KneeModuleId,
@@ -96,6 +96,15 @@ function MriReferenceFigure({
   return (
     <figure className="ra-plate-card">
       <div className="ra-plate-frame">
+        {!plate.viewBox && (
+          <img
+            src={plate.imageSrc}
+            alt=""
+            className="ra-plate-bg-img"
+            decoding="sync"
+            aria-hidden="true"
+          />
+        )}
         <svg
           className="ra-plate-svg"
           viewBox={`${vx} ${vy} ${vw} ${vh}`}
@@ -119,7 +128,9 @@ function MriReferenceFigure({
             ))}
           </defs>
 
-          <image href={plate.imageSrc} x="0" y="0" width="100" height="100" preserveAspectRatio="none" />
+          {plate.viewBox && (
+            <image href={plate.imageSrc} x="0" y="0" width="100" height="100" preserveAspectRatio="none" />
+          )}
 
           {plate.annotations.map((ann, idx) => {
             const pal = TONE_PALETTE[ann.tone];
@@ -269,28 +280,35 @@ function MriReferenceFigure({
   );
 }
 
-export function MriReportingGuidePage({ onJumpToModule }: MriReportingGuidePageProps) {
+export function MriReportingGuidePage({
+  jointDef,
+  onJumpToModule,
+}: MriReportingGuidePageProps) {
+  const { reportGuide } = jointDef;
+  const blindSpotsNum = String(reportGuide.chapters.length + 1);
+  const firstStructureId = jointDef.anatomySystemGroups[0]?.entries[0]?.structureId;
+
   return (
     <div className="ra-article-shell">
       <aside className="ra-toc" aria-label="Article sections">
         <div className="ra-toc-label">Contents</div>
         <nav className="ra-toc-nav">
-          {RA_GUIDE_CHAPTERS.map((ch) => (
+          {reportGuide.chapters.map((ch) => (
             <a key={ch.id} href={`#guide-${ch.id}`} className="ra-toc-link">
               <span className="ra-toc-num">{ch.number}.</span>
               <span>{ch.title}</span>
             </a>
           ))}
           <a href="#guide-blind-spots" className="ra-toc-link">
-            <span className="ra-toc-num">7.</span>
-            <span>Six Blind Spots Before Signing Out</span>
+            <span className="ra-toc-num">{blindSpotsNum}.</span>
+            <span>{reportGuide.blindSpotsTitle}</span>
           </a>
         </nav>
 
         <button
           type="button"
           className="ra-toc-return"
-          onClick={() => onJumpToModule('anatomy', undefined, 'Femur')}
+          onClick={() => onJumpToModule('anatomy', undefined, firstStructureId)}
         >
           <span>Open 3D + MRI Viewer</span>
           <ArrowUpRight size={12} />
@@ -299,16 +317,12 @@ export function MriReportingGuidePage({ onJumpToModule }: MriReportingGuidePageP
 
       <article className="ra-article-main">
         <header className="ra-masthead">
-          <div className="ra-eyebrow">Musculoskeletal MRI Reference · 3.0T OpenMSK qDESS</div>
-          <h2 className="ra-main-title">MRI of the Knee — Systematic Approach</h2>
-          <p className="ra-main-lead">
-            A structured reading-room routine modeled for orthopedic and radiology residents: review
-            every structure in order across orthogonal planes so subtle tears and secondary
-            footprints are never missed.
-          </p>
+          <div className="ra-eyebrow">{reportGuide.eyebrow}</div>
+          <h2 className="ra-main-title">{reportGuide.title}</h2>
+          <p className="ra-main-lead">{reportGuide.subtitle}</p>
 
           <div className="ra-pass-strip" aria-label="Five-pass reading routine">
-            {FIVE_PASS_SCROLL_ORDER.map((item) => (
+            {reportGuide.fivePassOrder.map((item) => (
               <div key={item.step} className="ra-pass-item">
                 <div className="ra-pass-head">
                   <span className="ra-pass-num">{item.step}</span>
@@ -320,7 +334,7 @@ export function MriReportingGuidePage({ onJumpToModule }: MriReportingGuidePageP
           </div>
         </header>
 
-        {RA_GUIDE_CHAPTERS.map((chapter) => (
+        {reportGuide.chapters.map((chapter) => (
           <section key={chapter.id} id={`guide-${chapter.id}`} className="ra-chapter">
             <h2 className="ra-chapter-title">
               <span className="ra-ch-num">{chapter.number}.</span> {chapter.title}
@@ -392,15 +406,12 @@ export function MriReportingGuidePage({ onJumpToModule }: MriReportingGuidePageP
 
         <section id="guide-blind-spots" className="ra-chapter">
           <h2 className="ra-chapter-title">
-            <span className="ra-ch-num">7.</span> Six Blind Spots Before Signing Out
+            <span className="ra-ch-num">{blindSpotsNum}.</span> {reportGuide.blindSpotsTitle}
           </h2>
-          <p className="ra-chapter-lead">
-            Run this brief check after dictating your primary impression—these six regions hold the
-            highest rate of clinically consequential misses on routine knee MRI.
-          </p>
+          <p className="ra-chapter-lead">{reportGuide.blindSpotsLead}</p>
 
           <ol className="ra-blindspot-list">
-            {SIX_BLIND_SPOTS.map((spot) => (
+            {reportGuide.blindSpots.map((spot) => (
               <li key={spot.title}>
                 <strong>{spot.title}:</strong> {spot.check}
               </li>

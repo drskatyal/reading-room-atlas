@@ -1,90 +1,18 @@
-import type { KneeModuleId, StructureId } from '../types/atlas';
+import type {
+  GuideFigurePlate,
+  GuidePlateAnnotation,
+  GuideSubSection,
+  GuideTone,
+  RaGuideChapter,
+} from '../types/atlas';
 
-export type GuideTone = 'cyan' | 'amber' | 'crimson' | 'emerald';
-
-export type GuidePlateAnnotation =
-  | {
-      kind: 'arrow';
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      tone: GuideTone;
-      label?: string;
-      lx?: number;
-      ly?: number;
-    }
-  | {
-      kind: 'line';
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      tone: GuideTone;
-      dashed?: boolean;
-      label?: string;
-      lx?: number;
-      ly?: number;
-    }
-  | {
-      kind: 'zone';
-      cx: number;
-      cy: number;
-      rx: number;
-      ry: number;
-      rotate?: number;
-      tone: GuideTone;
-      label?: string;
-      lx?: number;
-      ly?: number;
-    }
-  | {
-      kind: 'caliper';
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      tone: GuideTone;
-      label: string;
-      lx?: number;
-      ly?: number;
-    };
-
-export interface GuideFigurePlate {
-  id: string;
-  figureLabel: string;
-  imageSrc: string;
-  alt: string;
-  viewBox?: string;
-  annotations: GuidePlateAnnotation[];
-  caption: string;
-  link?: {
-    label: string;
-    mode: 'anatomy' | 'pathology';
-    moduleId?: KneeModuleId;
-    structureId?: StructureId;
-  };
-}
-
-export interface GuideSubSection {
-  heading?: string;
-  paragraphs?: string[];
-  bullets?: Array<{ lead: string; text: string }>;
-  table?: {
-    columns: [string, string];
-    rows: Array<[string, string]>;
-  };
-  pitfall?: string;
-}
-
-export interface RaGuideChapter {
-  id: string;
-  number: string;
-  title: string;
-  lead: string;
-  subsections: GuideSubSection[];
-  plates: GuideFigurePlate[];
-}
+export type {
+  GuideFigurePlate,
+  GuidePlateAnnotation,
+  GuideSubSection,
+  GuideTone,
+  RaGuideChapter,
+};
 
 export const FIVE_PASS_SCROLL_ORDER: Array<{ step: string; title: string; detail: string }> = [
   {

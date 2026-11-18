@@ -41,8 +41,13 @@ const TONE_MAP: Record<
 };
 
 function clampCoord(val: number, min: number, max: number): number {
+  if (!Number.isFinite(val)) return min;
   if (max <= min) return min;
   return Math.max(min, Math.min(max, val));
+}
+
+function isFinitePt(pt: [number, number] | null | undefined): pt is [number, number] {
+  return Boolean(pt && Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
 }
 
 export function MriPathologyOverlay({
@@ -125,7 +130,7 @@ export function MriPathologyOverlay({
 
           if (ann.kind === 'edema') {
             const c = projectRas(ann.centerRas);
-            if (!c) return null;
+            if (!isFinitePt(c)) return null;
             const rPx = clampCoord(ann.radiusMm * pxPerMm, 14, 72);
             pushLabel(key, c[0], c[1] + rPx + 12, ann.label, tone);
             return (
@@ -148,7 +153,7 @@ export function MriPathologyOverlay({
           if (ann.kind === 'arrow') {
             const p1 = projectRas(ann.fromRas);
             const p2 = projectRas(ann.toRas);
-            if (!p1 || !p2) return null;
+            if (!isFinitePt(p1) || !isFinitePt(p2)) return null;
             const dx = p2[0] - p1[0];
             const dy = p2[1] - p1[1];
             const len = Math.max(1, Math.hypot(dx, dy));
@@ -187,7 +192,7 @@ export function MriPathologyOverlay({
           }
 
           if (ann.kind === 'cleft') {
-            const pts = ann.pointsRas.map(projectRas).filter((p): p is [number, number] => p !== null);
+            const pts = ann.pointsRas.map(projectRas).filter(isFinitePt);
             if (pts.length < 2) return null;
             const pointsAttr = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
             const mid = pts[Math.floor(pts.length / 2)];
@@ -217,7 +222,7 @@ export function MriPathologyOverlay({
           }
 
           if (ann.kind === 'region') {
-            const pts = ann.pointsRas.map(projectRas).filter((p): p is [number, number] => p !== null);
+            const pts = ann.pointsRas.map(projectRas).filter(isFinitePt);
             if (pts.length < 3) return null;
             const pointsAttr = pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
             const cx = pts.reduce((acc, p) => acc + p[0], 0) / pts.length;
@@ -240,7 +245,7 @@ export function MriPathologyOverlay({
           if (ann.kind === 'caliper') {
             const a = projectRas(ann.aRas);
             const b = projectRas(ann.bRas);
-            if (!a || !b) return null;
+            if (!isFinitePt(a) || !isFinitePt(b)) return null;
             const dx = b[0] - a[0];
             const dy = b[1] - a[1];
             const len = Math.max(1, Math.hypot(dx, dy));

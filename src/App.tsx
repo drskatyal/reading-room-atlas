@@ -3,31 +3,24 @@ import { AnatomySidebar } from './components/AnatomySidebar';
 import { EditorialGuidePanel } from './components/EditorialGuidePanel';
 import { FullScreen3DOverlay } from './components/FullScreen3DView';
 import { KneeSpecimen3D } from './components/KneeSpecimen3D';
+import { LandingHomePage } from './components/LandingHomePage';
 import { MriReportingGuidePage } from './components/MriReportingGuidePage';
 import { PathologySidebar } from './components/PathologySidebar';
 import { RealKneeMriViewer } from './components/RealKneeMriViewer';
 import { TopModuleBar } from './components/TopModuleBar';
 import { computeKneeKinematics } from './core/coordinates';
-import {
-  ALL_STRUCTURE_IDS,
-  ANATOMY_SYSTEM_GROUPS,
-  LAYER_GROUPS,
-  modeToPath,
-  PATIENT_DEMO_PRESETS,
-  pathToMode,
-} from './data/anatomyAndReportingData';
-import {
-  KNEE_MODULES,
-  RESIDENT_QUIZ_QUESTIONS,
-} from './data/kneeClinicalAtlas';
+import { buildRoute, parseRoute } from './core/routing';
+import { ALL_JOINT_ATLASES, getJointAtlas } from './data/joints';
 import type {
   AnatomyLandmarkItem,
   AppWorkspaceMode,
   CameraPresetKey,
+  JointAtlasDefinition,
+  JointId,
   KneeLandmarks,
   KneeModule,
-  KneeModuleId,
   LayerSelectMode,
+  ModuleId,
   MriAnnotation,
   MriContrastPreset,
   MriOverlayMode,
@@ -54,98 +47,156 @@ const BASE_VISIBILITY: TissueVisibility = {
   crossSection: false,
 };
 
-const INITIAL_ANATOMY_LANDMARK = ANATOMY_SYSTEM_GROUPS[0].entries[0].defaultLandmark;
-const FIRST_PATHOLOGY_MODULE =
-  KNEE_MODULES.find((m) => m.category === 'pathology') ?? KNEE_MODULES[0];
+function getFirstLandmark(jointDef: JointAtlasDefinition): AnatomyLandmarkItem {
+  const firstEntry = jointDef.anatomySystemGroups[0]?.entries[0];
+  if (firstEntry) return firstEntry.defaultLandmark;
+  const firstId = Object.keys(jointDef.structuresInfo)[0] ?? 'Femur';
+  return {
+    id: `${jointDef.id}-fallback`,
+    label: firstId,
+    structureId: firstId,
+    targetRas: jointDef.defaultMriSliceRas,
+    cameraPreset: 'anterior',
+    viewMode3D: 'solid',
+    mriPlane: 'coronal',
+    mriContrast: jointDef.mriContrastPresets[0]?.id ?? 'qdess-clinical',
+    mriZoom: 1.2,
+    keyFact: '',
+  };
+}
 
-function findDefaultLandmarkForStructure(sid: StructureId): AnatomyLandmarkItem {
-  for (const group of ANATOMY_SYSTEM_GROUPS) {
+function findDefaultLandmarkForStructure(
+  jointDef: JointAtlasDefinition,
+  sid: StructureId
+): AnatomyLandmarkItem {
+  for (const group of jointDef.anatomySystemGroups) {
     for (const entry of group.entries) {
       if (entry.structureId === sid) return entry.defaultLandmark;
     }
   }
-  return INITIAL_ANATOMY_LANDMARK;
+  return getFirstLandmark(jointDef);
+}
+
+function resolveModuleForJoint(
+  jointDef: JointAtlasDefinition,
+  mode: AppWorkspaceMode,
+  requestedModuleId?: string
+): KneeModule {
+  if (requestedModuleId) {
+    const exact = jointDef.modules.find((m) => m.id === requestedModuleId);
+    if (exact) return exact;
+  }
+  if (mode === 'pathology') {
+    return jointDef.modules.find((m) => m.category === 'pathology') ?? jointDef.modules[0];
+  }
+  return jointDef.modules[0];
 }
 
 export function App() {
-  const [landmarks, setLandmarks] = useState<KneeLandmarks | null>(null);
-  const [workspaceMode, setWorkspaceMode] = useState<AppWorkspaceMode>(() =>
-    typeof window !== 'undefined' ? pathToMode(window.location.pathname) : 'anatomy'
+  const initialRoute = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? parseRoute(window.location.pathname, window.location.search)
+        : { jointId: 'ankle' as JointId, mode: 'landing' as AppWorkspaceMode },
+    []
   );
-  const [lastDualMode, setLastDualMode] = useState<'anatomy' | 'pathology'>('anatomy');
+
+  const initialJointDef = useMemo(() => getJointAtlas(initialRoute.jointId), [initialRoute.jointId]);
+  const initialLandmark = useMemo(() => getFirstLandmark(initialJointDef), [initialJointDef]);
+  const initialModule = useMemo(
+    () => resolveModuleForJoint(initialJointDef, initialRoute.mode, initialRoute.moduleParam),
+    [initialJointDef, initialRoute.mode, initialRoute.moduleParam]
+  );
+  const initialStep = useMemo(() => {
+    if (initialRoute.mode === 'pathology' || initialRoute.mode === 'fullscreen-3d') {
+      return initialModule.subSteps[0];
+    }
+    return undefined;
+  }, [initialRoute.mode, initialModule]);
+
+  const [jointId, setJointId] = useState<JointId>(initialRoute.jointId);
+  const [landmarks, setLandmarks] = useState<KneeLandmarks | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<AppWorkspaceMode>(initialRoute.mode);
+  const [lastDualMode, setLastDualMode] = useState<'anatomy' | 'pathology'>(
+    initialRoute.mode === 'pathology' ? 'pathology' : 'anatomy'
+  );
   const [theme, setTheme] = useState<ThemeMode>('darkroom');
   const fsHostRef = useRef<HTMLDivElement | null>(null);
 
-  // Module & sub-step state (Pathology, Fullscreen Demo, Quiz)
-  const [moduleId, setModuleId] = useState<KneeModuleId>(() =>
-    typeof window !== 'undefined' && pathToMode(window.location.pathname) === 'pathology'
-      ? FIRST_PATHOLOGY_MODULE.id
-      : 'normal-overview'
-  );
+  const jointDef = useMemo(() => getJointAtlas(jointId), [jointId]);
+
+  const [moduleId, setModuleId] = useState<ModuleId>(initialModule.id);
   const [subStepIndex, setSubStepIndex] = useState(0);
 
-  // Individual structure visibility + Multi/Single layer mode
   const [enabledStructures, setEnabledStructures] = useState<Set<StructureId>>(
-    () => new Set(ALL_STRUCTURE_IDS)
+    () => new Set(Object.keys(initialJointDef.structuresInfo))
   );
   const [layerMode, setLayerMode] = useState<LayerSelectMode>('multiple');
 
-  // Anatomy mode state
-  const [activeLandmark, setActiveLandmark] = useState<AnatomyLandmarkItem>(
-    INITIAL_ANATOMY_LANDMARK
-  );
+  const [activeLandmark, setActiveLandmark] = useState<AnatomyLandmarkItem>(initialLandmark);
   const [customMriAnnotations, setCustomMriAnnotations] = useState<MriAnnotation[] | undefined>(
-    INITIAL_ANATOMY_LANDMARK.mriAnnotations
+    initialStep ? undefined : initialLandmark.mriAnnotations
   );
   const [mriOverlayMode, setMriOverlayMode] = useState<MriOverlayMode>('none');
   const [activeDemoPresetId, setActiveDemoPresetId] = useState<string>(
-    PATIENT_DEMO_PRESETS[0].id
+    initialJointDef.patientDemoPresets[0]?.id ?? ''
   );
   const [hideFull3DPins, setHideFull3DPins] = useState(false);
 
-  // Synchronized 3D + MRI state
   const [viewMode, setViewMode] = useState<SpecimenViewMode>(
-    INITIAL_ANATOMY_LANDMARK.viewMode3D
+    initialStep?.viewMode3D ?? initialLandmark.viewMode3D
   );
   const [cameraPreset, setCameraPreset] = useState<CameraPresetKey>(
-    INITIAL_ANATOMY_LANDMARK.cameraPreset
+    initialStep?.cameraPreset ?? initialLandmark.cameraPreset
   );
   const [cameraDistanceScale, setCameraDistanceScale] = useState<number>(
-    INITIAL_ANATOMY_LANDMARK.cameraDistanceScale ?? 1.05
+    initialStep?.cameraDistanceScale ?? initialLandmark.cameraDistanceScale ?? 1.05
   );
   const [cameraTrigger, setCameraTrigger] = useState(1);
 
-  const [mriPlane, setMriPlane] = useState<MriPlaneMode>(INITIAL_ANATOMY_LANDMARK.mriPlane);
-  const [mriContrast, setMriContrast] = useState<MriContrastPreset>(
-    INITIAL_ANATOMY_LANDMARK.mriContrast
+  const [mriPlane, setMriPlane] = useState<MriPlaneMode>(
+    initialStep?.mriPlane ?? initialLandmark.mriPlane
   );
-  const [mriZoom, setMriZoom] = useState<number>(INITIAL_ANATOMY_LANDMARK.mriZoom);
+  const [mriContrast, setMriContrast] = useState<MriContrastPreset>(
+    initialStep?.mriContrast ?? initialLandmark.mriContrast
+  );
+  const [mriZoom, setMriZoom] = useState<number>(
+    initialStep?.mriZoom ?? initialLandmark.mriZoom
+  );
   const [mriFocusTrigger, setMriFocusTrigger] = useState(1);
 
-  const [flexionDeg, setFlexionDeg] = useState<number>(6);
-  const [patellaSubluxation, setPatellaSubluxation] = useState<number>(0);
+  const [flexionDeg, setFlexionDeg] = useState<number>(
+    initialStep?.flexionDeg ?? initialJointDef.kinematicConfig.defaultDeg
+  );
+  const [patellaSubluxation, setPatellaSubluxation] = useState<number>(
+    initialStep?.patellaSubluxation ?? 0
+  );
 
   const [activeStructure, setActiveStructure] = useState<StructureId>(
-    INITIAL_ANATOMY_LANDMARK.structureId
+    initialStep?.focusStructure ?? initialLandmark.structureId
   );
   const [targetRasOverride, setTargetRasOverride] = useState<[number, number, number] | undefined>(
-    INITIAL_ANATOMY_LANDMARK.targetRas
+    initialStep ? initialStep.targetRasOverride : initialLandmark.targetRas
   );
-  const [targetBadge, setTargetBadge] = useState<string | undefined>(INITIAL_ANATOMY_LANDMARK.label);
-  const [mriSliceRas, setMriSliceRas] = useState<[number, number, number]>([112.6, 20.6, -11.9]);
+  const [targetBadge, setTargetBadge] = useState<string | undefined>(
+    initialStep?.targetBadge ?? initialLandmark.label
+  );
+  const [mriSliceRas, setMriSliceRas] = useState<[number, number, number]>(
+    initialJointDef.defaultMriSliceRas
+  );
 
   const [showTargetPointer, setShowTargetPointer] = useState(true);
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [showSlicePlane, setShowSlicePlane] = useState(false);
 
-  // Active Recall Quiz state
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
 
-  // Load OpenMSK 3T landmarks JSON once
+  // Fetch per-joint landmarks JSON whenever active joint changes
   useEffect(() => {
     let cancelled = false;
-    fetch('/data/knee-landmarks.json')
+    setLandmarks(null);
+    fetch(jointDef.landmarksUrl)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<KneeLandmarks>;
@@ -157,20 +208,35 @@ export function App() {
         setMriFocusTrigger((t) => t + 1);
       })
       .catch(() => {
-        // Fallback Right-knee landmarks exist inside viewer helpers
+        // Fallback default slice center remains active
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [jointDef.landmarksUrl]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (workspaceMode === 'landing') {
+      document.title = 'ReadingRoom Atlas — 6-Joint 3D & 3T MSK MRI Platform';
+    } else if (workspaceMode === 'report-guide') {
+      document.title = `${jointDef.shortName} MRI Reporting Guide — ReadingRoom Atlas`;
+    } else {
+      document.title = `${jointDef.name} — ReadingRoom Atlas`;
+    }
+  }, [workspaceMode, jointDef.name, jointDef.shortName]);
+
+  const firstPathologyModule = useMemo(
+    () => jointDef.modules.find((m) => m.category === 'pathology') ?? jointDef.modules[0],
+    [jointDef]
+  );
+
   const activeModule = useMemo<KneeModule>(
-    () => KNEE_MODULES.find((m) => m.id === moduleId) ?? FIRST_PATHOLOGY_MODULE,
-    [moduleId]
+    () => jointDef.modules.find((m) => m.id === moduleId) ?? firstPathologyModule,
+    [jointDef.modules, moduleId, firstPathologyModule]
   );
 
   const activeSubStep = useMemo(
@@ -179,24 +245,28 @@ export function App() {
   );
 
   const activeQuiz = useMemo<ResidentQuizQuestion>(
-    () => RESIDENT_QUIZ_QUESTIONS[quizIndex] ?? RESIDENT_QUIZ_QUESTIONS[0],
-    [quizIndex]
+    () => jointDef.quizQuestions[quizIndex] ?? jointDef.quizQuestions[0],
+    [jointDef.quizQuestions, quizIndex]
   );
 
   const quizHideTarget =
     workspaceMode === 'quiz' && quizAnswers[activeQuiz.id] === undefined;
 
-  const pushRouteForMode = useCallback((mode: AppWorkspaceMode) => {
-    if (typeof window === 'undefined') return;
-    const nextPath = modeToPath(mode);
-    if (window.location.pathname !== nextPath) {
-      window.history.pushState(null, '', nextPath);
-    }
-  }, []);
+  const pushRoute = useCallback(
+    (jId: JointId, mode: AppWorkspaceMode, modId?: string, skipPush = false) => {
+      if (skipPush || typeof window === 'undefined') return;
+      const nextUrl = buildRoute(jId, mode, mode === 'pathology' ? modId : undefined);
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== nextUrl) {
+        window.history.pushState(null, '', nextUrl);
+      }
+    },
+    []
+  );
 
-  const enableAllStructures = useCallback(() => {
-    setEnabledStructures(new Set(ALL_STRUCTURE_IDS));
-  }, []);
+  const enableAllStructures = useCallback((targetDef: JointAtlasDefinition = jointDef) => {
+    setEnabledStructures(new Set(Object.keys(targetDef.structuresInfo)));
+  }, [jointDef]);
 
   const handleToggleStructure = useCallback(
     (id: StructureId) => {
@@ -218,41 +288,44 @@ export function App() {
     setEnabledStructures(new Set([id]));
   }, []);
 
-  const applyAnatomyLandmark = useCallback((item: AnatomyLandmarkItem) => {
-    setActiveLandmark(item);
-    setCustomMriAnnotations(item.mriAnnotations);
-    setModuleId('normal-overview');
-    setSubStepIndex(0);
-    setViewMode(item.viewMode3D);
-    setCameraPreset(item.cameraPreset);
-    setCameraDistanceScale(item.cameraDistanceScale ?? 1.04);
-    setCameraTrigger((t) => t + 1);
-    setMriPlane(item.mriPlane);
-    setMriContrast(item.mriContrast);
-    setMriZoom(item.mriZoom);
-    setFlexionDeg(6);
-    setPatellaSubluxation(0);
-    setActiveStructure(item.structureId);
-    setTargetRasOverride(item.targetRas);
-    setTargetBadge(item.label);
-    setMriFocusTrigger((t) => t + 1);
-    setEnabledStructures((prev) => {
-      if (prev.has(item.structureId)) return prev;
-      const next = new Set(prev);
-      next.add(item.structureId);
-      return next;
-    });
-  }, []);
+  const applyAnatomyLandmark = useCallback(
+    (item: AnatomyLandmarkItem, targetDef: JointAtlasDefinition = jointDef) => {
+      setActiveLandmark(item);
+      setCustomMriAnnotations(item.mriAnnotations);
+      setModuleId(targetDef.modules[0].id);
+      setSubStepIndex(0);
+      setViewMode(item.viewMode3D);
+      setCameraPreset(item.cameraPreset);
+      setCameraDistanceScale(item.cameraDistanceScale ?? 1.04);
+      setCameraTrigger((t) => t + 1);
+      setMriPlane(item.mriPlane);
+      setMriContrast(item.mriContrast);
+      setMriZoom(item.mriZoom);
+      setFlexionDeg(targetDef.kinematicConfig.defaultDeg);
+      setPatellaSubluxation(0);
+      setActiveStructure(item.structureId);
+      setTargetRasOverride(item.targetRas);
+      setTargetBadge(item.label);
+      setMriFocusTrigger((t) => t + 1);
+      setEnabledStructures((prev) => {
+        if (prev.has(item.structureId)) return prev;
+        const next = new Set(prev);
+        next.add(item.structureId);
+        return next;
+      });
+    },
+    [jointDef]
+  );
 
   const handleToggleLayerGroup = useCallback(
     (groupId: TissueGroup) => {
-      const group = LAYER_GROUPS.find((g) => g.id === groupId);
+      const group = jointDef.layerGroups.find((g) => g.id === groupId);
       if (!group) return;
 
       if (layerMode === 'single') {
         setEnabledStructures(new Set(group.structures));
         if (workspaceMode === 'anatomy' && group.structures.length > 0) {
-          applyAnatomyLandmark(findDefaultLandmarkForStructure(group.structures[0]));
+          applyAnatomyLandmark(findDefaultLandmarkForStructure(jointDef, group.structures[0]), jointDef);
         }
         return;
       }
@@ -267,7 +340,7 @@ export function App() {
         return next;
       });
     },
-    [layerMode, workspaceMode, applyAnatomyLandmark]
+    [jointDef, layerMode, workspaceMode, applyAnatomyLandmark]
   );
 
   const applySubStep = useCallback((mod: KneeModule, nextIdx: number) => {
@@ -291,121 +364,184 @@ export function App() {
     setMriFocusTrigger((t) => t + 1);
   }, []);
 
-  const applyQuizQuestion = useCallback((idx: number) => {
-    const safeIdx = Math.max(0, Math.min(RESIDENT_QUIZ_QUESTIONS.length - 1, idx));
-    const q = RESIDENT_QUIZ_QUESTIONS[safeIdx];
-    setCustomMriAnnotations(undefined);
-    setQuizIndex(safeIdx);
-    setModuleId(q.moduleId);
-    setViewMode(q.viewMode3D);
-    setCameraPreset(q.cameraPreset);
-    setCameraDistanceScale(q.cameraDistanceScale ?? 1.05);
-    setCameraTrigger((t) => t + 1);
-    setMriPlane(q.mriPlane);
-    setMriContrast(q.mriContrast);
-    setMriZoom(q.mriZoom);
-    setFlexionDeg(q.flexionDeg);
-    setPatellaSubluxation(q.patellaSubluxation ?? 0);
-    setActiveStructure(q.targetStructure ?? 'ACL');
-    setTargetRasOverride(q.targetRasOverride);
-    setTargetBadge(q.targetBadge);
-    setMriFocusTrigger((t) => t + 1);
-  }, []);
+  const applyQuizQuestion = useCallback(
+    (idx: number, targetDef: JointAtlasDefinition = jointDef) => {
+      const questions = targetDef.quizQuestions;
+      const safeIdx = Math.max(0, Math.min(questions.length - 1, idx));
+      const q = questions[safeIdx];
+      const fallbackStruct = Object.keys(targetDef.structuresInfo)[0] ?? 'Femur';
+      setCustomMriAnnotations(undefined);
+      setQuizIndex(safeIdx);
+      setModuleId(q.moduleId);
+      setViewMode(q.viewMode3D);
+      setCameraPreset(q.cameraPreset);
+      setCameraDistanceScale(q.cameraDistanceScale ?? 1.05);
+      setCameraTrigger((t) => t + 1);
+      setMriPlane(q.mriPlane);
+      setMriContrast(q.mriContrast);
+      setMriZoom(q.mriZoom);
+      setFlexionDeg(q.flexionDeg);
+      setPatellaSubluxation(q.patellaSubluxation ?? 0);
+      setActiveStructure(q.targetStructure ?? fallbackStruct);
+      setTargetRasOverride(q.targetRasOverride);
+      setTargetBadge(q.targetBadge);
+      setMriFocusTrigger((t) => t + 1);
+    },
+    [jointDef]
+  );
 
   const handleSelectPathologyModule = useCallback(
-    (id: KneeModuleId) => {
-      const mod = KNEE_MODULES.find((m) => m.id === id);
+    (id: ModuleId) => {
+      const mod = jointDef.modules.find((m) => m.id === id);
       if (mod) {
-        enableAllStructures();
+        enableAllStructures(jointDef);
         applySubStep(mod, 0);
-        const matchPreset = PATIENT_DEMO_PRESETS.find((p) => p.moduleId === mod.id);
+        pushRoute(jointId, 'pathology', mod.id);
+        const matchPreset = jointDef.patientDemoPresets.find((p) => p.moduleId === mod.id);
         if (matchPreset) setActiveDemoPresetId(matchPreset.id);
       }
     },
-    [enableAllStructures, applySubStep]
+    [jointDef, jointId, enableAllStructures, applySubStep, pushRoute]
   );
 
   const handleSelectPatientPreset = useCallback(
     (preset: PatientDemoPreset) => {
       setActiveDemoPresetId(preset.id);
-      const mod = KNEE_MODULES.find((m) => m.id === preset.moduleId);
+      const mod = jointDef.modules.find((m) => m.id === preset.moduleId);
       if (mod) {
         applySubStep(mod, preset.subStepIndex);
       }
     },
-    [applySubStep]
+    [jointDef.modules, applySubStep]
   );
 
-  const handleWorkspaceModeChange = useCallback(
-    (mode: AppWorkspaceMode) => {
-      setWorkspaceMode(mode);
-      pushRouteForMode(mode);
-      if (mode === 'anatomy' || mode === 'pathology') {
-        setLastDualMode(mode);
+  const switchJointAndMode = useCallback(
+    (
+      nextJointId: JointId,
+      nextMode: AppWorkspaceMode,
+      options?: { moduleId?: string; structureId?: StructureId; skipPush?: boolean }
+    ) => {
+      const targetDef = getJointAtlas(nextJointId);
+      const switchingJoint = nextJointId !== jointId;
+
+      setWorkspaceMode(nextMode);
+      if (nextMode === 'anatomy' || nextMode === 'pathology') {
+        setLastDualMode(nextMode);
       }
 
-      if (mode === 'anatomy') {
-        applyAnatomyLandmark(activeLandmark);
+      if (switchingJoint) {
+        setJointId(nextJointId);
+        setMriOverlayMode('none');
+        setLayerMode('multiple');
+        setQuizIndex(0);
+        setQuizAnswers({});
+        setEnabledStructures(new Set(Object.keys(targetDef.structuresInfo)));
+        setMriSliceRas(targetDef.defaultMriSliceRas);
+        setActiveDemoPresetId(targetDef.patientDemoPresets[0]?.id ?? '');
+      }
+
+      const resolvedMod = resolveModuleForJoint(targetDef, nextMode, options?.moduleId);
+      pushRoute(nextJointId, nextMode, resolvedMod.id, options?.skipPush);
+
+      if (nextMode === 'landing') {
         return;
       }
-      if (mode === 'pathology') {
-        enableAllStructures();
-        const mod =
-          activeModule.category === 'pathology' ? activeModule : FIRST_PATHOLOGY_MODULE;
-        applySubStep(mod, activeModule.category === 'pathology' ? subStepIndex : 0);
+
+      if (nextMode === 'anatomy') {
+        enableAllStructures(targetDef);
+        const lm = options?.structureId
+          ? findDefaultLandmarkForStructure(targetDef, options.structureId)
+          : switchingJoint
+            ? getFirstLandmark(targetDef)
+            : activeLandmark;
+        applyAnatomyLandmark(lm, targetDef);
         return;
       }
-      if (mode === 'quiz') {
-        enableAllStructures();
-        applyQuizQuestion(quizIndex);
+
+      if (nextMode === 'pathology') {
+        enableAllStructures(targetDef);
+        const modToUse =
+          !options?.moduleId && !switchingJoint && activeModule.category === 'pathology'
+            ? activeModule
+            : resolvedMod;
+        const stepIdx = !options?.moduleId && !switchingJoint && activeModule.category === 'pathology'
+          ? subStepIndex
+          : 0;
+        applySubStep(modToUse, stepIdx);
+        const matchPreset = targetDef.patientDemoPresets.find((p) => p.moduleId === modToUse.id);
+        if (matchPreset) setActiveDemoPresetId(matchPreset.id);
         return;
       }
-      if (mode === 'fullscreen-3d') {
-        const preset =
-          PATIENT_DEMO_PRESETS.find((p) => p.moduleId === moduleId) ??
-          PATIENT_DEMO_PRESETS[0];
-        setActiveDemoPresetId(preset.id);
+
+      if (nextMode === 'quiz') {
+        enableAllStructures(targetDef);
+        applyQuizQuestion(switchingJoint ? 0 : quizIndex, targetDef);
+        return;
+      }
+
+      if (nextMode === 'fullscreen-3d') {
+        enableAllStructures(targetDef);
+        const preset = switchingJoint
+          ? targetDef.patientDemoPresets[0]
+          : targetDef.patientDemoPresets.find((p) => p.moduleId === moduleId) ??
+            targetDef.patientDemoPresets[0];
+        if (preset) {
+          setActiveDemoPresetId(preset.id);
+          const pMod = targetDef.modules.find((m) => m.id === preset.moduleId) ?? resolvedMod;
+          applySubStep(pMod, preset.subStepIndex);
+        } else {
+          applyAnatomyLandmark(getFirstLandmark(targetDef), targetDef);
+        }
       }
     },
     [
-      pushRouteForMode,
-      applyAnatomyLandmark,
-      activeLandmark,
+      jointId,
+      pushRoute,
       enableAllStructures,
+      activeLandmark,
+      applyAnatomyLandmark,
       activeModule,
-      applySubStep,
       subStepIndex,
+      applySubStep,
       applyQuizQuestion,
       quizIndex,
       moduleId,
     ]
   );
 
+  const handleWorkspaceModeChange = useCallback(
+    (mode: AppWorkspaceMode) => {
+      switchJointAndMode(jointId, mode);
+    },
+    [jointId, switchJointAndMode]
+  );
+
+  const handleChangeJoint = useCallback(
+    (nextJointId: JointId) => {
+      const targetMode: AppWorkspaceMode =
+        workspaceMode === 'landing' ? 'anatomy' : workspaceMode;
+      switchJointAndMode(nextJointId, targetMode);
+    },
+    [workspaceMode, switchJointAndMode]
+  );
+
   useEffect(() => {
     const onPopState = () => {
-      setWorkspaceMode(pathToMode(window.location.pathname));
+      const r = parseRoute(window.location.pathname, window.location.search);
+      switchJointAndMode(r.jointId, r.mode, { moduleId: r.moduleParam, skipPush: true });
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [switchJointAndMode]);
 
   const handleJumpFromGuide = useCallback(
-    (targetMode: 'anatomy' | 'pathology', targetModId?: KneeModuleId, targetStruct?: StructureId) => {
-      setWorkspaceMode(targetMode);
-      setLastDualMode(targetMode);
-      pushRouteForMode(targetMode);
-      enableAllStructures();
-      if (targetMode === 'pathology' && targetModId) {
-        const mod = KNEE_MODULES.find((m) => m.id === targetModId) ?? FIRST_PATHOLOGY_MODULE;
-        applySubStep(mod, 0);
-      } else {
-        const item = targetStruct
-          ? findDefaultLandmarkForStructure(targetStruct)
-          : INITIAL_ANATOMY_LANDMARK;
-        applyAnatomyLandmark(item);
-      }
+    (targetMode: 'anatomy' | 'pathology', targetModId?: ModuleId, targetStruct?: StructureId) => {
+      switchJointAndMode(jointId, targetMode, {
+        moduleId: targetModId,
+        structureId: targetStruct,
+      });
     },
-    [pushRouteForMode, enableAllStructures, applySubStep, applyAnatomyLandmark]
+    [jointId, switchJointAndMode]
   );
 
   const handleToggleFullScreen3D = useCallback(() => {
@@ -419,7 +555,7 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const key = e.key.toLowerCase();
       if (key === 'l') {
         setShowAllLabels((v) => !v);
@@ -437,25 +573,25 @@ export function App() {
       setTargetRasOverride(undefined);
       setTargetBadge(undefined);
       if (workspaceMode === 'anatomy') {
-        const item = findDefaultLandmarkForStructure(id);
+        const item = findDefaultLandmarkForStructure(jointDef, id);
         setActiveLandmark(item);
         setCustomMriAnnotations(undefined);
       }
     },
-    [workspaceMode]
+    [workspaceMode, jointDef]
   );
 
   const handleQuizLocateClick = useCallback(
     (clickedId: StructureId) => {
       if (workspaceMode !== 'quiz' || activeQuiz.kind !== 'locate') return;
       const normalized =
-        activeQuiz.targetStructure === 'Fibula' && clickedId === 'LCL'
+        jointId === 'knee' && activeQuiz.targetStructure === 'Fibula' && clickedId === 'LCL'
           ? 'Fibula'
           : clickedId;
       setQuizAnswers((prev) => ({ ...prev, [activeQuiz.id]: normalized }));
       setActiveStructure(activeQuiz.targetStructure ?? normalized);
     },
-    [workspaceMode, activeQuiz]
+    [workspaceMode, activeQuiz, jointId]
   );
 
   const handleAnswerQuizOption = useCallback(
@@ -472,8 +608,8 @@ export function App() {
     if (targetRasOverride) return targetRasOverride;
     const s = landmarks?.structures[activeStructure];
     if (s) return s.centroidRas;
-    return landmarks?.jointCenterRas ?? null;
-  }, [targetRasOverride, landmarks, activeStructure]);
+    return landmarks?.jointCenterRas ?? jointDef.defaultMriSliceRas;
+  }, [targetRasOverride, landmarks, activeStructure, jointDef.defaultMriSliceRas]);
 
   const effectiveModuleId = workspaceMode === 'quiz' ? activeQuiz.moduleId : activeModule.id;
   const effectiveSubStepId = workspaceMode === 'quiz' ? activeQuiz.id : activeSubStep.id;
@@ -496,7 +632,10 @@ export function App() {
         effectiveModuleId,
         landmarks?.threeScale ?? 0.04,
         landmarks?.laterality ?? 'Right',
-        patellaSubluxation
+        patellaSubluxation,
+        jointId,
+        jointDef.kinematicConfig.minDeg,
+        jointDef.kinematicConfig.maxDeg
       ),
     [
       flexionDeg,
@@ -504,19 +643,24 @@ export function App() {
       landmarks?.threeScale,
       landmarks?.laterality,
       patellaSubluxation,
+      jointId,
+      jointDef.kinematicConfig.minDeg,
+      jointDef.kinematicConfig.maxDeg,
     ]
   );
 
   const quizCandidateStructures = useMemo<StructureId[] | undefined>(() => {
     if (workspaceMode !== 'quiz' || activeQuiz.kind !== 'locate') return undefined;
     const ids = activeQuiz.options.map((o) => o.id) as StructureId[];
-    if (activeQuiz.targetStructure === 'Fibula' && !ids.includes('LCL')) {
+    if (jointId === 'knee' && activeQuiz.targetStructure === 'Fibula' && !ids.includes('LCL')) {
       return [...ids, 'LCL'];
     }
     return ids;
-  }, [workspaceMode, activeQuiz]);
+  }, [workspaceMode, activeQuiz, jointId]);
 
+  const isLanding = workspaceMode === 'landing';
   const isGuidePage = workspaceMode === 'report-guide';
+  const isWorkstationHidden = isLanding || isGuidePage;
   const isFullScreen3D = workspaceMode === 'fullscreen-3d';
   const hasLeftSidebar =
     workspaceMode === 'anatomy' || workspaceMode === 'pathology' || workspaceMode === 'quiz';
@@ -525,20 +669,33 @@ export function App() {
   return (
     <div className="atlas-shell">
       <TopModuleBar
+        activeJoint={jointDef}
+        joints={ALL_JOINT_ATLASES}
+        onChangeJoint={handleChangeJoint}
         workspaceMode={workspaceMode}
         onChangeWorkspaceMode={handleWorkspaceModeChange}
         theme={theme}
         onToggleTheme={() => setTheme((t) => (t === 'darkroom' ? 'monograph' : 'darkroom'))}
       />
 
-      {/* Dedicated How to Report MRI Webpage */}
-      {isGuidePage && (
+      {isLanding && (
         <main className="atlas-stage-layout full-width">
-          <MriReportingGuidePage onJumpToModule={handleJumpFromGuide} />
+          <LandingHomePage
+            joints={ALL_JOINT_ATLASES}
+            onLaunchJointMode={(targetJoint, targetMode, opts) =>
+              switchJointAndMode(targetJoint, targetMode, opts)
+            }
+          />
         </main>
       )}
 
-      {/* Persistent Zero-Lag WebGL Stage (stays mounted across ALL mode transitions!) */}
+      {isGuidePage && (
+        <main className="atlas-stage-layout full-width">
+          <MriReportingGuidePage jointDef={jointDef} onJumpToModule={handleJumpFromGuide} />
+        </main>
+      )}
+
+      {/* Persistent Zero-Lag WebGL Stage (stays mounted cleanly behind Landing/Guide pages) */}
       <main
         className={`atlas-stage-layout workstation-persistent ${
           workspaceMode === 'pathology'
@@ -546,20 +703,21 @@ export function App() {
             : hasLeftSidebar
               ? 'with-left-sidebar'
               : 'full-width'
-        } ${isGuidePage ? 'is-hidden' : ''}`}
+        } ${isWorkstationHidden ? 'is-hidden' : ''}`}
       >
         {workspaceMode === 'anatomy' && (
           <AnatomySidebar
+            jointDef={jointDef}
             activeLandmark={activeLandmark}
             activeStructure={activeStructure}
-            onSelectLandmark={applyAnatomyLandmark}
+            onSelectLandmark={(lm) => applyAnatomyLandmark(lm, jointDef)}
             enabledStructures={enabledStructures}
             layerMode={layerMode}
             onChangeLayerMode={setLayerMode}
             onToggleStructure={handleToggleStructure}
             onToggleLayerGroup={handleToggleLayerGroup}
             onIsolateStructure={handleIsolateStructure}
-            onEnableAllStructures={enableAllStructures}
+            onEnableAllStructures={() => enableAllStructures(jointDef)}
             xrayBones={xrayBones}
             onToggleXrayBones={() =>
               setViewMode((v) => (v === 'joint-interior' ? 'solid' : 'joint-interior'))
@@ -573,6 +731,7 @@ export function App() {
 
         {workspaceMode === 'pathology' && (
           <PathologySidebar
+            jointDef={jointDef}
             activeModuleId={activeModule.id}
             subStepIndex={subStepIndex}
             onSelectModule={handleSelectPathologyModule}
@@ -587,10 +746,11 @@ export function App() {
 
         {workspaceMode === 'quiz' && (
           <EditorialGuidePanel
+            quizQuestions={jointDef.quizQuestions}
             quizQuestion={activeQuiz}
             quizIndex={quizIndex}
             quizAnswers={quizAnswers}
-            onSelectQuizQuestion={applyQuizQuestion}
+            onSelectQuizQuestion={(idx) => applyQuizQuestion(idx, jointDef)}
             onAnswerQuiz={handleAnswerQuizOption}
             onResetQuiz={() => setQuizAnswers({})}
           />
@@ -601,6 +761,7 @@ export function App() {
           className={`viewports-split ${isFullScreen3D ? 'single-3d-fill' : ''}`}
         >
           <KneeSpecimen3D
+            jointDef={jointDef}
             landmarks={landmarks}
             moduleId={effectiveModuleId}
             subStepId={effectiveSubStepId}
@@ -611,7 +772,7 @@ export function App() {
             onChangeViewMode={setViewMode}
             visibility={BASE_VISIBILITY}
             enabledStructures={enabledStructures}
-            paused={isGuidePage}
+            paused={isWorkstationHidden}
             cameraPreset={cameraPreset}
             cameraDistanceScale={cameraDistanceScale}
             cameraTrigger={cameraTrigger}
@@ -639,6 +800,7 @@ export function App() {
 
           <div className={`mri-pane-slot ${isFullScreen3D ? 'is-hidden' : ''}`}>
             <RealKneeMriViewer
+              jointDef={jointDef}
               landmarks={landmarks}
               contrastPreset={mriContrast}
               onContrastChange={setMriContrast}
@@ -658,7 +820,7 @@ export function App() {
               onOverlayModeChange={
                 workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
               }
-              hidden={isGuidePage || isFullScreen3D}
+              hidden={isWorkstationHidden || isFullScreen3D}
               onRasCrosshairChange={setMriSliceRas}
               onSelectStructureFromMri={handleViewportStructurePick}
               onQuizMriClick={handleQuizLocateClick}
@@ -667,6 +829,7 @@ export function App() {
 
           {isFullScreen3D && (
             <FullScreen3DOverlay
+              jointDef={jointDef}
               hostElement={fsHostRef.current}
               activePresetId={activeDemoPresetId}
               onSelectPreset={handleSelectPatientPreset}
@@ -680,7 +843,7 @@ export function App() {
               onChangeLayerMode={setLayerMode}
               onToggleStructure={handleToggleStructure}
               onToggleLayerGroup={handleToggleLayerGroup}
-              onEnableAllStructures={enableAllStructures}
+              onEnableAllStructures={() => enableAllStructures(jointDef)}
               hideLabels={hideFull3DPins}
               onToggleHideLabels={() => setHideFull3DPins((v) => !v)}
             />
