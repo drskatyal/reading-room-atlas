@@ -17,15 +17,17 @@ app.get('/health', (_req, res) => {
 
 app.use(
   express.static(distDir, {
-    maxAge: '1h',
+    maxAge: '1y',
     setHeaders(res, filePath) {
       if (filePath.endsWith('.nii.gz')) {
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
         res.removeHeader('Content-Encoding');
       } else if (filePath.endsWith('.glb')) {
         res.setHeader('Content-Type', 'model/gltf-binary');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+      } else if (filePath.endsWith('.json') || filePath.includes(`${path.sep}guide${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
       } else if (filePath.endsWith('.html')) {
         res.setHeader('Cache-Control', 'no-cache');
       }

@@ -5,20 +5,20 @@
   "alignmentDetected": "RAS (x,y,z)",
   "wlPresets": {
     "pdfatsat-clinical": {
-      "min": 14,
-      "max": 228
+      "min": 9,
+      "max": 215
     },
     "cuff-tendon": {
-      "min": 12,
-      "max": 185
+      "min": 7,
+      "max": 196
     },
     "labrum-cartilage": {
-      "min": 22,
-      "max": 240
+      "min": 16,
+      "max": 228
     },
     "marrow-hill-sachs": {
-      "min": 10,
-      "max": 168
+      "min": 8,
+      "max": 204
     }
   },
   "jointCenterRas": [
@@ -38,9 +38,9 @@
     0
   ],
   "fatsatShape": [
-    144,
     176,
-    176
+    208,
+    208
   ],
   "fatsatRasBounds": {
     "min": [

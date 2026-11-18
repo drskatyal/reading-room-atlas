@@ -1,24 +1,24 @@
 {
   "specimen": "wrist-carpus-3t",
   "laterality": "Right",
-  "demographics": "In-Vivo 3.0T PD-FS Right Wrist & Carpus Atlas (18 Structures)",
+  "demographics": "In-Vivo 3.0T Right Wrist & Carpus MRI Atlas (18 Structures)",
   "alignmentDetected": "RAS (x,y,z)",
   "wlPresets": {
     "pdfatsat-clinical": {
       "min": 14,
-      "max": 228
+      "max": 224
     },
     "carpal-ligament": {
-      "min": 14,
-      "max": 192
+      "min": 10,
+      "max": 204
     },
     "tfcc-chondral": {
       "min": 20,
-      "max": 240
+      "max": 236
     },
     "marrow-avn": {
-      "min": 10,
-      "max": 166
+      "min": 12,
+      "max": 212
     }
   },
   "jointCenterRas": [
@@ -38,9 +38,9 @@
     0
   ],
   "fatsatShape": [
-    144,
     176,
-    176
+    208,
+    208
   ],
   "fatsatRasBounds": {
     "min": [

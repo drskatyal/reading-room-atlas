@@ -219,7 +219,17 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
               return (
                 <article
                   key={joint.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open ${joint.name} workstation`}
                   className={`landing-joint-card ${isFlagship ? 'is-flagship' : ''}`}
+                  onClick={() => onLaunchJointMode(joint.id, 'anatomy')}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onLaunchJointMode(joint.id, 'anatomy');
+                    }
+                  }}
                 >
                   <div className="landing-joint-top">
                     <div className="landing-joint-thumb-wrap">
@@ -254,11 +264,18 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
                     ))}
                   </ul>
 
-                  <div className="landing-joint-actions">
+                  <div
+                    className="landing-joint-actions"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
                     <button
                       type="button"
                       className="landing-mode-btn is-primary"
-                      onClick={() => onLaunchJointMode(joint.id, 'anatomy')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchJointMode(joint.id, 'anatomy');
+                      }}
                     >
                       <Layers2 size={13} />
                       <span>Anatomy</span>
@@ -266,7 +283,10 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
                     <button
                       type="button"
                       className="landing-mode-btn"
-                      onClick={() => onLaunchJointMode(joint.id, 'pathology')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchJointMode(joint.id, 'pathology');
+                      }}
                     >
                       <ClipboardCheck size={13} />
                       <span>Pathologies ({pathCount})</span>
@@ -274,7 +294,10 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
                     <button
                       type="button"
                       className="landing-mode-btn"
-                      onClick={() => onLaunchJointMode(joint.id, 'report-guide')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchJointMode(joint.id, 'report-guide');
+                      }}
                     >
                       <BookOpen size={13} />
                       <span>Report Guide</span>
@@ -282,7 +305,10 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
                     <button
                       type="button"
                       className="landing-mode-btn"
-                      onClick={() => onLaunchJointMode(joint.id, 'fullscreen-3d')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchJointMode(joint.id, 'fullscreen-3d');
+                      }}
                     >
                       <Maximize2 size={13} />
                       <span>3D View</span>
@@ -290,7 +316,10 @@ export function LandingHomePage({ joints, onLaunchJointMode }: LandingHomePagePr
                     <button
                       type="button"
                       className="landing-mode-btn"
-                      onClick={() => onLaunchJointMode(joint.id, 'quiz')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLaunchJointMode(joint.id, 'quiz');
+                      }}
                     >
                       <GraduationCap size={13} />
                       <span>Quiz ({joint.quizQuestions.length})</span>

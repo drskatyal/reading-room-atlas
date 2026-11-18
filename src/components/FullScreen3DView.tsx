@@ -7,6 +7,7 @@ import {
   Maximize,
   Minimize,
   RotateCcw,
+  Tags,
 } from 'lucide-react';
 import type {
   JointAtlasDefinition,
@@ -34,6 +35,8 @@ interface FullScreen3DOverlayProps {
   onEnableAllStructures: () => void;
   hideLabels: boolean;
   onToggleHideLabels: () => void;
+  showAllLabels: boolean;
+  onToggleAllLabels: () => void;
 }
 
 export function FullScreen3DOverlay({
@@ -54,6 +57,8 @@ export function FullScreen3DOverlay({
   onEnableAllStructures,
   hideLabels,
   onToggleHideLabels,
+  showAllLabels,
+  onToggleAllLabels,
 }: FullScreen3DOverlayProps) {
   const [panelOpen, setPanelOpen] = useState(true);
   const [layersOpen, setLayersOpen] = useState(false);
@@ -217,6 +222,16 @@ export function FullScreen3DOverlay({
           )}
 
           <div className="fs-panel-actions">
+            <button
+              type="button"
+              aria-pressed={showAllLabels}
+              className={`mini-chip ${showAllLabels ? 'active' : ''}`}
+              onClick={onToggleAllLabels}
+              title="Label all enabled anatomy structures (L)"
+            >
+              <Tags size={11} />
+              <span>{showAllLabels ? 'Labels On' : '3D Labels'}</span>
+            </button>
             <button
               type="button"
               className={`mini-chip ${hideLabels ? 'active' : ''}`}

@@ -8,6 +8,7 @@ import {
   Plus,
   RotateCcw,
   Scan,
+  Tags,
 } from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -74,6 +75,35 @@ interface KneeSpecimen3DProps {
   isFullScreenPage?: boolean;
   onToggleFullScreenPage?: () => void;
   onQuizStructureClick?: (id: StructureId) => void;
+}
+
+function computeSurfaceAnchorLocal(geom: THREE.BufferGeometry): THREE.Vector3 {
+  const pos = geom.attributes.position;
+  if (!pos || pos.count === 0) return new THREE.Vector3();
+  let sx = 0;
+  let sy = 0;
+  let sz = 0;
+  for (let i = 0; i < pos.count; i++) {
+    sx += pos.getX(i);
+    sy += pos.getY(i);
+    sz += pos.getZ(i);
+  }
+  const cx = sx / pos.count;
+  const cy = sy / pos.count;
+  const cz = sz / pos.count;
+  let bestIdx = 0;
+  let bestDistSq = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const dx = pos.getX(i) - cx;
+    const dy = pos.getY(i) - cy;
+    const dz = pos.getZ(i) - cz;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < bestDistSq) {
+      bestDistSq = d2;
+      bestIdx = i;
+    }
+  }
+  return new THREE.Vector3(pos.getX(bestIdx), pos.getY(bestIdx), pos.getZ(bestIdx));
 }
 
 function computeFramedCamera(
@@ -216,6 +246,8 @@ export function KneeSpecimen3D({
   const calloutBadgeRef = useRef<HTMLDivElement | null>(null);
   const allPinsLayerRef = useRef<HTMLDivElement | null>(null);
   const pinButtonsRef = useRef<Map<StructureId, HTMLButtonElement>>(new Map());
+  const pinLinesRef = useRef<Map<StructureId, SVGLineElement>>(new Map());
+  const pinDotsRef = useRef<Map<StructureId, SVGCircleElement>>(new Map());
 
   // Latest props ref for rAF loop (zero React re-renders during drag/orbit)
   const stateRef = useRef({
@@ -699,26 +731,126 @@ export function KneeSpecimen3D({
 
       if (s.showAllLabels && allLayerEl) {
         allLayerEl.style.display = 'block';
-        for (const sid of s.jointDef.allPinStructures) {
-          const btn = pinButtonsRef.current.get(sid);
-          if (!btn) continue;
-          const m = refs.meshes.get(sid);
-          if (!m || !m.visible) {
-            btn.style.display = 'none';
+        const structureKeys = Object.keys(s.jointDef.structuresInfo) as StructureId[];
+        const activeItems: Array<{
+          sid: StructureId;
+          ax: number;
+          ay: number;
+          bx: number;
+          by: number;
+        }> = [];
+        let sumAx = 0;
+
+        for (const sid of structureKeys) {
+          const isEnabled = s.enabledStructures ? s.enabledStructures.has(sid) : true;
+          const m =
+            s.jointDef.id === 'knee' && s.moduleId === 'bucket-handle' && sid === 'MedialMeniscus'
+              ? refs.meshes.get('BucketHandleFragment') ?? refs.meshes.get(sid)
+              : refs.meshes.get(sid);
+
+          if (!isEnabled || !m || !m.visible) {
+            const btn = pinButtonsRef.current.get(sid);
+            const line = pinLinesRef.current.get(sid);
+            const dot = pinDotsRef.current.get(sid);
+            if (btn) btn.style.display = 'none';
+            if (line) line.style.display = 'none';
+            if (dot) dot.style.display = 'none';
             continue;
           }
-          tmpBox.setFromObject(m);
-          tmpBox.getCenter(tmpWorldPos);
-          tmpProj.copy(tmpWorldPos).project(camera);
-          const sx = (tmpProj.x * 0.5 + 0.5) * cw;
-          const sy = (-tmpProj.y * 0.5 + 0.5) * ch;
-          const vis =
-            tmpProj.z >= -1 && tmpProj.z <= 1 && sx > 20 && sx < cw - 20 && sy > 58 && sy < ch - 56;
-          if (!vis) {
-            btn.style.display = 'none';
+
+          const localAnchor = m.userData.labelAnchorLocal as THREE.Vector3 | undefined;
+          if (localAnchor) {
+            tmpWorldPos.copy(localAnchor).applyMatrix4(m.matrixWorld);
           } else {
+            tmpBox.setFromObject(m);
+            tmpBox.getCenter(tmpWorldPos);
+          }
+
+          tmpProj.copy(tmpWorldPos).project(camera);
+          const ax = (tmpProj.x * 0.5 + 0.5) * cw;
+          const ay = (-tmpProj.y * 0.5 + 0.5) * ch;
+          const vis =
+            tmpProj.z >= -1 && tmpProj.z <= 1 && ax > 14 && ax < cw - 14 && ay > 46 && ay < ch - 42;
+          if (!vis) {
+            const btn = pinButtonsRef.current.get(sid);
+            const line = pinLinesRef.current.get(sid);
+            const dot = pinDotsRef.current.get(sid);
+            if (btn) btn.style.display = 'none';
+            if (line) line.style.display = 'none';
+            if (dot) dot.style.display = 'none';
+            continue;
+          }
+
+          sumAx += ax;
+          activeItems.push({ sid, ax, ay, bx: ax, by: ay });
+        }
+
+        const midX = activeItems.length > 0 ? sumAx / activeItems.length : cw * 0.5;
+        const leftCol = activeItems.filter((it) => it.ax < midX);
+        const rightCol = activeItems.filter((it) => it.ax >= midX);
+        const minGap = 24;
+        const minY = 52;
+        const maxY = Math.max(minY + 40, ch - 48);
+
+        const relaxColumn = (col: typeof activeItems, side: 'left' | 'right') => {
+          if (col.length === 0) return;
+          col.sort((a, b) => a.ay - b.ay);
+          const margin = Math.min(cw * 0.25, 118);
+          for (let i = 0; i < col.length; i++) {
+            const it = col[i];
+            it.bx =
+              side === 'left'
+                ? Math.max(54, Math.min(it.ax - 44, margin))
+                : Math.min(cw - 54, Math.max(it.ax + 44, cw - margin));
+            it.by = Math.max(minY, Math.min(maxY, it.ay));
+          }
+          for (let i = 1; i < col.length; i++) {
+            if (col[i].by < col[i - 1].by + minGap) {
+              col[i].by = col[i - 1].by + minGap;
+            }
+          }
+          if (col[col.length - 1].by > maxY) {
+            col[col.length - 1].by = maxY;
+          }
+          for (let i = col.length - 2; i >= 0; i--) {
+            if (col[i].by > col[i + 1].by - minGap) {
+              col[i].by = col[i + 1].by - minGap;
+            }
+          }
+          for (let i = 0; i < col.length; i++) {
+            col[i].by = Math.max(minY, Math.min(maxY, col[i].by));
+          }
+        };
+
+        relaxColumn(leftCol, 'left');
+        relaxColumn(rightCol, 'right');
+
+        for (const it of activeItems) {
+          const btn = pinButtonsRef.current.get(it.sid);
+          const line = pinLinesRef.current.get(it.sid);
+          const dot = pinDotsRef.current.get(it.sid);
+          const isAct = it.sid === s.activeStructure;
+          if (btn) {
             btn.style.display = 'inline-block';
-            btn.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
+            btn.style.transform = `translate3d(${it.bx.toFixed(1)}px, ${it.by.toFixed(1)}px, 0) translate(-50%, -50%)`;
+          }
+          if (line) {
+            line.style.display = 'inline';
+            line.setAttribute('x1', it.ax.toFixed(1));
+            line.setAttribute('y1', it.ay.toFixed(1));
+            line.setAttribute('x2', it.bx.toFixed(1));
+            line.setAttribute('y2', it.by.toFixed(1));
+            line.setAttribute(
+              'stroke',
+              isAct ? 'rgba(56, 189, 248, 0.95)' : 'rgba(148, 163, 184, 0.58)'
+            );
+            line.setAttribute('stroke-width', isAct ? '1.5' : '1.1');
+          }
+          if (dot) {
+            dot.style.display = 'inline';
+            dot.setAttribute('cx', it.ax.toFixed(1));
+            dot.setAttribute('cy', it.ay.toFixed(1));
+            dot.setAttribute('fill', isAct ? '#38bdf8' : '#7dd3fc');
           }
         }
       }
@@ -987,6 +1119,7 @@ export function KneeSpecimen3D({
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           mesh.userData.structureName = name;
+          mesh.userData.labelAnchorLocal = computeSurfaceAnchorLocal(mesh.geometry);
 
           refs.meshes.set(name, mesh);
           refs.materials.set(name, mat);
@@ -1066,12 +1199,13 @@ export function KneeSpecimen3D({
     refs.wake(12);
   }, [theme]);
 
-  // Wake rAF loop whenever clinical props, visibility, or kinematics change
+  // Wake rAF loop whenever clinical props, visibility, enabled structures, or kinematics change
   useEffect(() => {
     sceneRefs.current?.wake(18);
   }, [
     viewMode,
     visibility,
+    enabledStructures,
     subStepId,
     meniscalTearMorphology,
     targetRasOverride,
@@ -1191,6 +1325,17 @@ export function KneeSpecimen3D({
             <span>X-Ray</span>
           </button>
 
+          <button
+            type="button"
+            aria-pressed={showAllLabels}
+            className={`chip-btn ${showAllLabels ? 'active' : ''}`}
+            onClick={onToggleAllLabels}
+            title="Label all structures currently turned on in Anatomy (L)"
+          >
+            <Tags size={13} />
+            <span>{showAllLabels ? 'Labels On' : 'Labels'}</span>
+          </button>
+
           <div className="popover-anchor" ref={layersRef}>
             <button
               type="button"
@@ -1248,7 +1393,7 @@ export function KneeSpecimen3D({
                   <div className="layer-checks">
                     <label className="check-row">
                       <input type="checkbox" checked={showAllLabels} onChange={onToggleAllLabels} />
-                      <span>All Anatomy Pins (L)</span>
+                      <span>Active Anatomy Labels (L)</span>
                     </label>
                     <label className="check-row">
                       <input
@@ -1331,7 +1476,39 @@ export function KneeSpecimen3D({
               aria-hidden={!showAllLabels}
               style={{ display: showAllLabels ? 'block' : 'none' }}
             >
-              {jointDef.allPinStructures.map((sid) => {
+              <svg className="callout-svg" aria-hidden="true">
+                {Object.keys(jointDef.structuresInfo).map((sid) => (
+                  <g key={`pin-gfx-${sid}`}>
+                    <line
+                      ref={(el) => {
+                        if (el) pinLinesRef.current.set(sid, el);
+                        else pinLinesRef.current.delete(sid);
+                      }}
+                      x1={0}
+                      y1={0}
+                      x2={0}
+                      y2={0}
+                      stroke="rgba(148, 163, 184, 0.58)"
+                      strokeWidth="1.1"
+                      style={{ display: 'none' }}
+                    />
+                    <circle
+                      ref={(el) => {
+                        if (el) pinDotsRef.current.set(sid, el);
+                        else pinDotsRef.current.delete(sid);
+                      }}
+                      cx={0}
+                      cy={0}
+                      r="3"
+                      fill="#7dd3fc"
+                      stroke="#0f172a"
+                      strokeWidth="1.2"
+                      style={{ display: 'none' }}
+                    />
+                  </g>
+                ))}
+              </svg>
+              {Object.keys(jointDef.structuresInfo).map((sid) => {
                 const info = jointDef.structuresInfo[sid];
                 if (!info) return null;
                 const active = sid === activeStructure;

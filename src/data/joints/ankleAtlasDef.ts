@@ -14,11 +14,11 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
     '10 fellowship pathology clinics with RAS-locked 3T MRI callouts & 3D bone-bruise / tear-cleft modeling',
     '8-chapter reporting monograph with calibrated MRI plates & 10 active-recall cases',
   ],
-  previewPlateSrc: '/guide/ankle/sag-achilles-haglund.png',
+  previewPlateSrc: '/guide/ankle/sag-achilles-haglund.png?v=3',
   glbUrl: '/models/ankle-3t.glb',
-  mriVolumeUrl: '/volumes/ankle-3t.nii.gz',
-  mriSegUrl: '/volumes/ankle-3t-seg.nii.gz',
-  landmarksUrl: '/data/ankle-landmarks.json',
+  mriVolumeUrl: '/volumes/ankle-3t.nii.gz?v=3',
+  mriSegUrl: '/volumes/ankle-3t-seg.nii.gz?v=3',
+  landmarksUrl: '/data/ankle-landmarks.json?v=4',
   mriSpecLabel: '3T PD-FS Ankle Coil',
   mriSliceTitle: '3T PD-FS MRI',
   supportsSubregionOverlay: false,
@@ -730,7 +730,7 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
             mriPlane: 'sagittal',
             mriContrast: 'ligament-tendon',
             mriZoom: 1.22,
-            mriAnnotations: [{ kind: 'arrow', fromRas: [78, -98, 95], toRas: [78, -86, 95], tone: 'cyan', label: 'Critical Zone (2–6 cm)' }],
+            mriAnnotations: [{ kind: 'arrow', fromRas: [78, -110, 95], toRas: [78, -94, 95], tone: 'cyan', label: 'Critical Zone (2–6 cm)' }],
             keyFact: 'Evaluate axial anterior margin concavity and integrity of adjacent Kager fat pad & retrocalcaneal bursa.',
           },
         },
@@ -2094,7 +2094,7 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl1',
             figureLabel: 'Figure 1 · Ax PD-FS · ATFL & PTFL Level',
-            imageSrc: '/guide/ankle/ax-atfl-mortise.png',
+            imageSrc: '/guide/ankle/ax-atfl-mortise.png?v=3',
             alt: 'Axial ankle PD-FS slice showing ATFL and PTFL at comma-shaped fibula',
             annotations: [
               { kind: 'arrow', x1: 22, y1: 31, x2: 39, y2: 43, tone: 'crimson', label: 'ATFL', lx: 8, ly: 26 },
@@ -2124,7 +2124,7 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl2',
             figureLabel: 'Figure 2 · Ax PD-FS · Syndesmotic Incisura',
-            imageSrc: '/guide/ankle/ax-syndesmosis.png',
+            imageSrc: '/guide/ankle/ax-syndesmosis.png?v=3',
             alt: 'Axial ankle slice 10 mm above tibial plafond demonstrating AITFL and incisura',
             annotations: [
               { kind: 'arrow', x1: 22, y1: 30, x2: 38, y2: 45, tone: 'amber', label: 'AITFL', lx: 8, ly: 24 },
@@ -2154,7 +2154,7 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl3',
             figureLabel: 'Figure 3 · Cor PD-FS · Deltoid & Spring Sling',
-            imageSrc: '/guide/ankle/cor-deltoid-spring.png',
+            imageSrc: '/guide/ankle/cor-deltoid-spring.png?v=3',
             alt: 'Coronal ankle MRI demonstrating deltoid complex and medial talus',
             annotations: [
               { kind: 'arrow', x1: 86, y1: 64, x2: 70, y2: 51, tone: 'cyan', label: 'Deltoid Complex', lx: 76, ly: 72 },
@@ -2187,11 +2187,11 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl4',
             figureLabel: 'Figure 4 · Cor PD-FS · Talar Dome Cartilage Arcs',
-            imageSrc: '/guide/ankle/cor-talar-dome.png',
+            imageSrc: '/guide/ankle/cor-talar-dome.png?v=3',
             alt: 'Coronal ankle MRI showing medial and lateral talar dome shoulders',
             annotations: [
-              { kind: 'arrow', x1: 74, y1: 28, x2: 58, y2: 45, tone: 'crimson', label: 'Medial Dome (Deep OLT)', lx: 64, ly: 20 },
-              { kind: 'arrow', x1: 26, y1: 28, x2: 42, y2: 45, tone: 'amber', label: 'Lateral Shoulder (Wafer)', lx: 10, ly: 20 },
+              { kind: 'arrow', x1: 74, y1: 28, x2: 57, y2: 38, tone: 'crimson', label: 'Medial Dome (Deep OLT)', lx: 64, ly: 20 },
+              { kind: 'arrow', x1: 26, y1: 28, x2: 42, y2: 38, tone: 'amber', label: 'Lateral Shoulder (Wafer)', lx: 10, ly: 20 },
             ],
             caption: 'Coronal section displaying the opposing tibial plafond and medial/lateral talar dome osteochondral shoulders.',
             link: { label: 'Open Talar Dome OLT', mode: 'pathology', moduleId: 'osteochondral-talar-dome' },
@@ -2216,11 +2216,11 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl5',
             figureLabel: 'Figure 5 · Sag PD-FS · Achilles & Calcaneal Insertion',
-            imageSrc: '/guide/ankle/sag-achilles-haglund.png',
+            imageSrc: '/guide/ankle/sag-achilles-haglund.png?v=3',
             alt: 'Sagittal ankle MRI highlighting Achilles insertion, Kager fat pad, and Haglund region',
             annotations: [
-              { kind: 'arrow', x1: 88, y1: 80, x2: 78, y2: 68, tone: 'cyan', label: 'Achilles Enthesis', lx: 66, ly: 86 },
-              { kind: 'zone', cx: 72, cy: 57, rx: 5, ry: 5, tone: 'amber', label: 'Haglund Bursal Zone', lx: 38, ly: 52 },
+              { kind: 'arrow', x1: 94, y1: 80, x2: 89, y2: 67, tone: 'cyan', label: 'Achilles Enthesis', lx: 64, ly: 86 },
+              { kind: 'zone', cx: 81, cy: 56, rx: 5, ry: 5, tone: 'amber', label: 'Haglund Bursal Zone', lx: 42, ly: 48 },
             ],
             caption: 'Midline sagittal 3T slice profiling the uniform dark Achilles band, clear Kager fat triangle, and posterior calcaneal bursal corner.',
             link: { label: 'Open Achilles & Haglund', mode: 'pathology', moduleId: 'achilles-haglund' },
@@ -2245,7 +2245,7 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl6',
             figureLabel: 'Figure 6 · Ax PD-FS · PTT, FHL & Tibial Nerve',
-            imageSrc: '/guide/ankle/ax-medial-tunnels.png',
+            imageSrc: '/guide/ankle/ax-medial-tunnels.png?v=3',
             alt: 'Axial ankle MRI highlighting PTT, FHL, and tibial nerve in tarsal tunnel',
             annotations: [
               { kind: 'arrow', x1: 88, y1: 42, x2: 74, y2: 53, tone: 'emerald', label: 'PTT', lx: 84, ly: 34 },
@@ -2275,10 +2275,10 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl7',
             figureLabel: 'Figure 7 · Ax PD-FS · Retromalleolar Peroneals',
-            imageSrc: '/guide/ankle/ax-peroneals.png',
+            imageSrc: '/guide/ankle/ax-peroneals.png?v=3',
             alt: 'Axial MRI at lateral malleolus groove showing Peroneus Brevis and Longus',
             annotations: [
-              { kind: 'arrow', x1: 14, y1: 76, x2: 30, y2: 67, tone: 'crimson', label: 'Peroneus Brevis/Longus', lx: 6, ly: 84 },
+              { kind: 'arrow', x1: 14, y1: 76, x2: 31, y2: 59, tone: 'crimson', label: 'Peroneus Brevis/Longus', lx: 6, ly: 84 },
             ],
             caption: 'Axial cut through the posterior fibular groove illustrating the juxtaposed Peroneus Brevis (anterior) and Longus (posterior) tendons beneath the SPR.',
             link: { label: 'Open Peroneal Split', mode: 'pathology', moduleId: 'peroneal-split-subluxation' },
@@ -2303,11 +2303,11 @@ export const ANKLE_ATLAS: JointAtlasDefinition = {
           {
             id: 'ankle-pl8',
             figureLabel: 'Figure 8 · Sag PD-FS · Plantar Fascia & Sinus Tarsi',
-            imageSrc: '/guide/ankle/sag-plantar-sinus.png',
+            imageSrc: '/guide/ankle/sag-plantar-sinus.png?v=3',
             alt: 'Sagittal MRI showcasing central plantar fascia and tarsal sinus',
             annotations: [
-              { kind: 'arrow', x1: 72, y1: 86, x2: 57, y2: 74, tone: 'cyan', label: 'Plantar Origin', lx: 66, ly: 92 },
-              { kind: 'zone', cx: 47, cy: 47, rx: 6, ry: 5, tone: 'amber', label: 'Sinus Tarsi', lx: 22, ly: 38 },
+              { kind: 'arrow', x1: 72, y1: 86, x2: 60, y2: 75, tone: 'cyan', label: 'Plantar Origin', lx: 66, ly: 92 },
+              { kind: 'zone', cx: 48, cy: 53, rx: 6, ry: 5, tone: 'amber', label: 'Sinus Tarsi', lx: 22, ly: 42 },
             ],
             caption: 'Sagittal slice tracking the thin hypointense central plantar fascia off the calcaneus and fat-filled cervical sinus tarsi canal.',
             link: { label: 'Open Plantar & Baxter Clinic', mode: 'pathology', moduleId: 'plantar-fasciitis-baxter' },

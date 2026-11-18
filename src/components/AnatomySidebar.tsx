@@ -201,12 +201,13 @@ export function AnatomySidebar({
 
           <button
             type="button"
+            aria-pressed={showAllLabels}
             className={`mini-chip ${showAllLabels ? 'active' : ''}`}
             onClick={onToggleAllLabels}
-            title="Toggle 3D anatomy pins (L)"
+            title="Label all structures turned on in Anatomy (L)"
           >
             <Tags size={11} />
-            <span>Pins</span>
+            <span>3D Labels</span>
           </button>
         </div>
 

@@ -27,6 +27,11 @@ import type {
 } from '../types/atlas';
 import { MriPathologyOverlay } from './MriPathologyOverlay';
 
+function volumeFileName(url: string): string {
+  const clean = url.split('?')[0] ?? url;
+  return clean.split('/').pop() || 'volume.nii.gz';
+}
+
 interface RealKneeMriViewerProps {
   jointDef: JointAtlasDefinition;
   landmarks: KneeLandmarks | null;
@@ -660,6 +665,7 @@ export function RealKneeMriViewer({
         await nv.loadVolumes([
           {
             url: jointDef.mriVolumeUrl,
+            name: volumeFileName(jointDef.mriVolumeUrl),
             colormap: 'gray',
             cal_min: initMin,
             cal_max: initMax,
@@ -667,6 +673,7 @@ export function RealKneeMriViewer({
           },
           {
             url: segUrl,
+            name: volumeFileName(segUrl),
             opacity: activeOverlayMode === 'none' ? 0 : segOpacity,
             cal_min: 0,
             cal_max: useSubregions ? 16 : segMaps.maxLabel,
@@ -950,6 +957,7 @@ export function RealKneeMriViewer({
           const url = useSub ? jointDef.mriSubregionSegUrl! : jointDef.mriSegUrl;
           await nv.addVolumeFromUrl({
             url,
+            name: volumeFileName(url),
             opacity: segOpacity,
             cal_min: 0,
             cal_max: useSub ? 16 : segMaps.maxLabel,

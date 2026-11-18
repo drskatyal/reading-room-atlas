@@ -206,16 +206,17 @@ describe('ReadingRoom Multi-Joint 3T Atlas & Platform Suite', () => {
   });
 
   it('verifies every GLB, NIfTI MRI volume, landmarks JSON, and guide PNG exists on disk and is non-empty', () => {
-    const checkPublicAsset = (url: string) => {
-      const fullPath = path.join(PUBLIC_ROOT, url.replace(/^\//, ''));
+    const checkPublicAsset = (url: string, minBytes = 100) => {
+      const cleanUrl = url.replace(/\?.*$/, '').replace(/^\//, '');
+      const fullPath = path.join(PUBLIC_ROOT, cleanUrl);
       expect(fs.existsSync(fullPath), `Missing public asset: ${url}`).toBe(true);
       const stat = fs.statSync(fullPath);
-      expect(stat.size, `Empty public asset: ${url}`).toBeGreaterThan(100);
+      expect(stat.size, `Empty public asset: ${url}`).toBeGreaterThan(minBytes);
     };
 
     for (const joint of ALL_JOINT_ATLASES) {
       checkPublicAsset(joint.glbUrl);
-      checkPublicAsset(joint.mriVolumeUrl);
+      checkPublicAsset(joint.mriVolumeUrl, 500_000);
       checkPublicAsset(joint.mriSegUrl);
       if (joint.mriSubregionSegUrl) checkPublicAsset(joint.mriSubregionSegUrl);
       checkPublicAsset(joint.landmarksUrl);
@@ -257,13 +258,16 @@ describe('ReadingRoom Multi-Joint 3T Atlas & Platform Suite', () => {
   });
 
   it('contains zero attribution mentions of external websites across all joint data and UI code', () => {
-    const forbidden = /radiology\s*assistant|radsource|radiopaedia/i;
+    const forbidden = /radiology\s*assistant|radsource|radiopaedia|\btotalsegmentator\b|\btcia\b/i;
 
     for (const joint of ALL_JOINT_ATLASES) {
       const strings = collectAllStrings(joint);
       for (const s of strings) {
         expect(s, `Forbidden attribution text in ${joint.id}: ${s.slice(0, 120)}`).not.toMatch(forbidden);
       }
+      const lmPath = path.join(PUBLIC_ROOT, joint.landmarksUrl.replace(/\?.*$/, '').replace(/^\//, ''));
+      const lmText = fs.readFileSync(lmPath, 'utf8');
+      expect(lmText, `Forbidden source attribution in ${joint.landmarksUrl}`).not.toMatch(forbidden);
     }
 
     const walkFiles = (dir: string, acc: string[] = []): string[] => {

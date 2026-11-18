@@ -846,6 +846,8 @@ export function App() {
               onEnableAllStructures={() => enableAllStructures(jointDef)}
               hideLabels={hideFull3DPins}
               onToggleHideLabels={() => setHideFull3DPins((v) => !v)}
+              showAllLabels={showAllLabels}
+              onToggleAllLabels={() => setShowAllLabels((v) => !v)}
             />
           )}
         </div>

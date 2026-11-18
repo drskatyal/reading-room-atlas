@@ -13,11 +13,11 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
     '7 pathology clinics incl. PASTA, Subscapularis Pulley, Bankart/Hill-Sachs, SLAP & Kim/Reverse Bankart',
     '6-chapter reporting monograph with calibrated MRI plates & 8 active-recall cases',
   ],
-  previewPlateSrc: '/guide/shoulder/cor-supraspinatus.png',
+  previewPlateSrc: '/guide/shoulder/cor-supraspinatus.png?v=3',
   glbUrl: '/models/shoulder-3t.glb',
-  mriVolumeUrl: '/volumes/shoulder-3t.nii.gz',
-  mriSegUrl: '/volumes/shoulder-3t-seg.nii.gz',
-  landmarksUrl: '/data/shoulder-landmarks.json',
+  mriVolumeUrl: '/volumes/shoulder-3t.nii.gz?v=3',
+  mriSegUrl: '/volumes/shoulder-3t-seg.nii.gz?v=3',
+  landmarksUrl: '/data/shoulder-landmarks.json?v=4',
   mriSpecLabel: '3T PD-FS Shoulder Coil',
   mriSliceTitle: '3T PD-FS MRI',
   defaultMriSliceRas: [152, -40, 1368],
@@ -1470,7 +1470,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl1',
             figureLabel: 'Figure 1 · Cor PD-FS · Supraspinatus & Bursa',
-            imageSrc: '/guide/shoulder/cor-supraspinatus.png',
+            imageSrc: '/guide/shoulder/cor-supraspinatus.png?v=3',
             alt: 'Coronal shoulder MRI showing supraspinatus footprint and subacromial bursa',
             annotations: [
               { kind: 'arrow', x1: 16, y1: 20, x2: 31, y2: 33, tone: 'cyan', label: 'Supraspinatus', lx: 8, ly: 14 },
@@ -1499,7 +1499,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl2',
             figureLabel: 'Figure 2 · Ax PD-FS · Biceps Groove & Subscapularis',
-            imageSrc: '/guide/shoulder/ax-subscap-biceps.png',
+            imageSrc: '/guide/shoulder/ax-subscap-biceps.png?v=3',
             alt: 'Axial shoulder slice showing LHBT in bicipital sulcus and subscapularis footprint',
             annotations: [
               { kind: 'arrow', x1: 14, y1: 14, x2: 29, y2: 24, tone: 'crimson', label: 'LHBT Groove', lx: 6, ly: 10 },
@@ -1528,7 +1528,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl3',
             figureLabel: 'Figure 3 · Ax PD-FS · Bankart & Hill-Sachs Level',
-            imageSrc: '/guide/shoulder/ax-bankart-hill-sachs.png',
+            imageSrc: '/guide/shoulder/ax-bankart-hill-sachs.png?v=3',
             alt: 'Axial shoulder MRI illustrating anteroinferior labrum and posterolateral humeral head',
             annotations: [
               { kind: 'arrow', x1: 50, y1: 24, x2: 35, y2: 39, tone: 'crimson', label: 'Anterior Labrum', lx: 52, ly: 20 },
@@ -1556,7 +1556,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl4',
             figureLabel: 'Figure 4 · Cor PD-FS · Superior Labral-Biceps Anchor',
-            imageSrc: '/guide/shoulder/cor-slap-anchor.png',
+            imageSrc: '/guide/shoulder/cor-slap-anchor.png?v=3',
             alt: 'Coronal shoulder MRI showing superior labrum and spinoglenoid notch region',
             annotations: [
               { kind: 'arrow', x1: 22, y1: 24, x2: 33, y2: 40, tone: 'crimson', label: 'SLAP Anchor', lx: 12, ly: 18 },
@@ -1585,7 +1585,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl5',
             figureLabel: 'Figure 5 · Sag PD-FS · Coracoid & Rotator Interval',
-            imageSrc: '/guide/shoulder/sag-interval-y.png',
+            imageSrc: '/guide/shoulder/sag-interval-y.png?v=3',
             alt: 'Sagittal oblique shoulder MRI demonstrating coracoid and rotator interval fat triangle',
             annotations: [
               { kind: 'arrow', x1: 14, y1: 22, x2: 26, y2: 36, tone: 'cyan', label: 'Coracoid Process', lx: 6, ly: 16 },
@@ -1613,7 +1613,7 @@ export const SHOULDER_ATLAS: JointAtlasDefinition = {
           {
             id: 'sh-pl6',
             figureLabel: 'Figure 6 · Cor PD-FS · AC Outlet & Acromion',
-            imageSrc: '/guide/shoulder/cor-ac-outlet.png',
+            imageSrc: '/guide/shoulder/cor-ac-outlet.png?v=3',
             alt: 'Coronal shoulder MRI showing AC joint and acromion outlet roof',
             annotations: [
               { kind: 'arrow', x1: 66, y1: 20, x2: 51, y2: 36, tone: 'amber', label: 'AC Joint', lx: 68, ly: 16 },

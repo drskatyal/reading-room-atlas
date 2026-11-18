@@ -1,24 +1,24 @@
 {
   "specimen": "elbow-3t",
   "laterality": "Right",
-  "demographics": "In-Vivo 3.0T PD-FS Right Elbow Atlas (15 Structures)",
+  "demographics": "In-Vivo 3.0T Right Elbow & Distal Humerus MRI Atlas (15 Structures)",
   "alignmentDetected": "RAS (x,y,z)",
   "wlPresets": {
     "pdfatsat-clinical": {
-      "min": 14,
-      "max": 228
+      "min": 9,
+      "max": 200
     },
     "collateral-tendon": {
-      "min": 12,
-      "max": 185
+      "min": 7,
+      "max": 184
     },
     "chondral-ocd": {
-      "min": 22,
-      "max": 242
+      "min": 15,
+      "max": 214
     },
     "marrow-edema": {
-      "min": 10,
-      "max": 168
+      "min": 8,
+      "max": 190
     }
   },
   "jointCenterRas": [
@@ -38,9 +38,9 @@
     0
   ],
   "fatsatShape": [
-    144,
     176,
-    176
+    208,
+    208
   ],
   "fatsatRasBounds": {
     "min": [
