@@ -1,4 +1,6 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { applyBoneOsteologyShading } from '../anatomyMaterials';
 import { computeKneeKinematics, rasToThree, threeToRas } from '../coordinates';
 import {
   ALL_STRUCTURE_IDS,
@@ -177,5 +179,42 @@ describe('Knee Atlas coordinates, curriculum & multi-mode navigation', () => {
         }
       }
     }
+  });
+
+  it('welds UV-seam vertices and writes valid osteology RGB vertex shading', () => {
+    const sphere = new THREE.SphereGeometry(1.2, 24, 16);
+    applyBoneOsteologyShading(sphere, 'Femur');
+
+    const pos = sphere.getAttribute('position');
+    const col = sphere.getAttribute('color');
+    expect(col).toBeDefined();
+    expect(col.count).toBe(pos.count);
+    expect(col.itemSize).toBe(3);
+
+    const byPos = new Map<string, [number, number, number]>();
+    let seamPairsChecked = 0;
+
+    for (let i = 0; i < pos.count; i++) {
+      const r = col.getX(i);
+      const g = col.getY(i);
+      const b = col.getZ(i);
+      expect(Number.isFinite(r) && r >= 0.25 && r <= 1.0).toBe(true);
+      expect(Number.isFinite(g) && g >= 0.25 && g <= 1.0).toBe(true);
+      expect(Number.isFinite(b) && b >= 0.25 && b <= 1.0).toBe(true);
+
+      const key = `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+      const existing = byPos.get(key);
+      if (existing) {
+        expect(Math.abs(existing[0] - r)).toBeLessThan(1e-6);
+        expect(Math.abs(existing[1] - g)).toBeLessThan(1e-6);
+        expect(Math.abs(existing[2] - b)).toBeLessThan(1e-6);
+        seamPairsChecked++;
+      } else {
+        byPos.set(key, [r, g, b]);
+      }
+    }
+
+    expect(seamPairsChecked).toBeGreaterThan(0);
+    sphere.dispose();
   });
 });

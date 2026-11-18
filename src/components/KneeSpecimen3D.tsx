@@ -15,6 +15,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
+  BONE_NAMES,
+  applyBoneOsteologyShading,
   createAnatomyTextureBank,
   createStudioVignetteTexture,
   createTissueMaterial,
@@ -328,7 +330,7 @@ export function KneeSpecimen3D({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.setSize(width, height, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.06;
+    renderer.toneMappingExposure = 0.89;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
@@ -356,22 +358,29 @@ export function KneeSpecimen3D({
     roomEnv.dispose();
     pmrem.dispose();
 
-    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x1e293b, 0.55);
+    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x261f19, 0.24);
     scene.add(hemiLight);
 
-    const keyLight = new THREE.DirectionalLight(0xfffaf0, 2.35);
-    keyLight.position.set(4.5, 6.2, 5.4);
+    const keyLight = new THREE.DirectionalLight(0xfff7eb, 1.48);
+    keyLight.position.set(6.4, 5.4, 2.4);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.bias = -0.0005;
+    keyLight.shadow.camera.left = -3.6;
+    keyLight.shadow.camera.right = 3.6;
+    keyLight.shadow.camera.top = 3.8;
+    keyLight.shadow.camera.bottom = -3.8;
+    keyLight.shadow.camera.near = 1.5;
+    keyLight.shadow.camera.far = 16.0;
+    keyLight.shadow.bias = -0.0004;
+    keyLight.shadow.normalBias = 0.018;
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xbbe6ff, 0.95);
-    fillLight.position.set(-5.2, 2.0, 3.6);
+    const fillLight = new THREE.DirectionalLight(0xc8e2f8, 0.22);
+    fillLight.position.set(-5.2, 1.4, 2.8);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xe0f2fe, 1.35);
-    rimLight.position.set(0.4, 3.8, -5.6);
+    const rimLight = new THREE.DirectionalLight(0xdbeafe, 0.68);
+    rimLight.position.set(0.4, 3.4, -6.0);
     scene.add(rimLight);
 
     // Subtle Studio Backdrop Sphere with vignette texture
@@ -516,6 +525,9 @@ export function KneeSpecimen3D({
         });
 
         for (const { name, mesh } of collected) {
+          if (BONE_NAMES.has(name) || name === 'Patella') {
+            applyBoneOsteologyShading(mesh.geometry, name);
+          }
           const mat = createTissueMaterial(name, clipPlane, textureBank, xrayUniform);
           mesh.material = mat;
           mesh.castShadow = true;

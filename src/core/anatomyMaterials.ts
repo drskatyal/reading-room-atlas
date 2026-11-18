@@ -24,6 +24,7 @@ export const CRUCIATE_NAMES = new Set(['ACL', 'PCL']);
 export const COLLATERAL_NAMES = new Set(['MCL', 'LCL']);
 
 export interface AnatomyTextureBank {
+  boneAlbedo: THREE.CanvasTexture;
   boneNormal: THREE.CanvasTexture;
   boneRoughness: THREE.CanvasTexture;
   collagenAlbedo: THREE.CanvasTexture;
@@ -52,9 +53,9 @@ export function createStudioVignetteTexture(theme: ThemeMode): THREE.CanvasTextu
       size * 0.68
     );
     if (theme === 'monograph') {
-      grad.addColorStop(0, '#fcfaf4');
-      grad.addColorStop(0.58, '#f0ebe0');
-      grad.addColorStop(1, '#dfd8c9');
+      grad.addColorStop(0, '#ebe4d6');
+      grad.addColorStop(0.58, '#ddd4c2');
+      grad.addColorStop(1, '#c9beaa');
     } else {
       grad.addColorStop(0, '#141b29');
       grad.addColorStop(0.52, '#0a0e16');
@@ -170,14 +171,34 @@ export function createAnatomyTextureBank(): AnatomyTextureBank {
       boneHeight[y * size + x] = f1 * 0.55 + f2 * 0.35 + pit;
     }
   }
-  const boneNormal = heightToNormalTexture(boneHeight, size, 2.4);
+  const boneNormal = heightToNormalTexture(boneHeight, size, 1.6);
+  boneNormal.repeat.set(3.8, 3.8);
+
+  const boneAlbedo = makeTileableCanvasTexture(
+    size,
+    (ctx) => {
+      const img = ctx.createImageData(size, size);
+      for (let i = 0; i < size * size; i++) {
+        // Subtle fine cortical ivory variation without blotchy noise
+        const t = Math.max(0, Math.min(1, (boneHeight[i] - 0.15) / 0.72));
+        const p = i * 4;
+        img.data[p] = Math.round(222 + t * (246 - 222));
+        img.data[p + 1] = Math.round(213 + t * (240 - 213));
+        img.data[p + 2] = Math.round(198 + t * (229 - 198));
+        img.data[p + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    },
+    THREE.SRGBColorSpace
+  );
+  boneAlbedo.repeat.set(3.8, 3.8);
 
   const boneRoughness = makeTileableCanvasTexture(size, (ctx) => {
     const img = ctx.createImageData(size, size);
     for (let i = 0; i < size * size; i++) {
-      // Base matte/eggshell periosteal variation 0.48..0.72
-      const v = Math.round(135 + (boneHeight[i] - 0.45) * 65);
-      const clamped = Math.max(95, Math.min(205, v));
+      // Matte-satin periosteal finish: smoother crests (~0.60), rougher pores/grooves (~0.84)
+      const v = Math.round(182 - (boneHeight[i] - 0.45) * 48);
+      const clamped = Math.max(152, Math.min(214, v));
       const p = i * 4;
       img.data[p] = clamped;
       img.data[p + 1] = clamped;
@@ -186,6 +207,7 @@ export function createAnatomyTextureBank(): AnatomyTextureBank {
     }
     ctx.putImageData(img, 0, 0);
   });
+  boneRoughness.repeat.set(3.8, 3.8);
 
   // 2. Collagen fascicle heightfield + subtly striated albedo (bundles run along V)
   const colHeight = new Float32Array(size * size);
@@ -210,10 +232,10 @@ export function createAnatomyTextureBank(): AnatomyTextureBank {
       const img = ctx.createImageData(size, size);
       for (let i = 0; i < size * size; i++) {
         const t = Math.max(0, Math.min(1, colHeight[i]));
-        // Subtle silk-cream fascicle shading between #e9dfcf (grooves) and #fffaf1 (bundle crest)
-        const r = Math.round(230 + t * 25);
-        const g = Math.round(220 + t * 28);
-        const b = Math.round(202 + t * 32);
+        // Subtle silk-ivory fascicle shading without clipping white under ACES Filmic
+        const r = Math.round(204 + t * 41);
+        const g = Math.round(196 + t * 40);
+        const b = Math.round(182 + t * 38);
         const p = i * 4;
         img.data[p] = r;
         img.data[p + 1] = g;
@@ -239,12 +261,14 @@ export function createAnatomyTextureBank(): AnatomyTextureBank {
   const fibrocartilageNormal = heightToNormalTexture(fibroHeight, size, 1.5);
 
   return {
+    boneAlbedo,
     boneNormal,
     boneRoughness,
     collagenAlbedo,
     collagenNormal,
     fibrocartilageNormal,
     dispose: () => {
+      boneAlbedo.dispose();
       boneNormal.dispose();
       boneRoughness.dispose();
       collagenAlbedo.dispose();
@@ -252,6 +276,249 @@ export function createAnatomyTextureBank(): AnatomyTextureBank {
       fibrocartilageNormal.dispose();
     },
   };
+}
+
+function smoothstep01(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Welds UV-seam duplicate vertices in 3D space, writes seamless area-weighted normals,
+ * and computes multi-pass geometric concavity + anatomical fossa/notch occlusion as warm
+ * osteological vertex colors so condyles, sulci, and the notch separate clearly in 3D.
+ */
+export function applyBoneOsteologyShading(
+  geometry: THREE.BufferGeometry,
+  meshName: string
+): void {
+  const posAttr = geometry.getAttribute('position');
+  if (!posAttr || posAttr.count === 0) return;
+
+  const vertCount = posAttr.count;
+  const vToWeld = new Int32Array(vertCount);
+  const weldMap = new Map<string, number>();
+  const weldPositions: number[] = [];
+
+  for (let i = 0; i < vertCount; i++) {
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i);
+    const z = posAttr.getZ(i);
+    const key = `${Math.round(x * 1e4)},${Math.round(y * 1e4)},${Math.round(z * 1e4)}`;
+    let w = weldMap.get(key);
+    if (w === undefined) {
+      w = weldPositions.length / 3;
+      weldMap.set(key, w);
+      weldPositions.push(x, y, z);
+    }
+    vToWeld[i] = w;
+  }
+
+  const weldCount = weldPositions.length / 3;
+  const wNorm = new Float32Array(weldCount * 3);
+  const neighbors: Array<Set<number>> = Array.from({ length: weldCount }, () => new Set<number>());
+
+  const index = geometry.getIndex();
+  const triCount = index ? Math.floor(index.count / 3) : Math.floor(vertCount / 3);
+
+  for (let t = 0; t < triCount; t++) {
+    const i0 = index ? index.getX(t * 3) : t * 3;
+    const i1 = index ? index.getX(t * 3 + 1) : t * 3 + 1;
+    const i2 = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+
+    const wa = vToWeld[i0];
+    const wb = vToWeld[i1];
+    const wc = vToWeld[i2];
+    if (wa === wb || wb === wc || wa === wc) continue;
+
+    neighbors[wa].add(wb);
+    neighbors[wa].add(wc);
+    neighbors[wb].add(wa);
+    neighbors[wb].add(wc);
+    neighbors[wc].add(wa);
+    neighbors[wc].add(wb);
+
+    const ax = weldPositions[wa * 3];
+    const ay = weldPositions[wa * 3 + 1];
+    const az = weldPositions[wa * 3 + 2];
+    const abx = weldPositions[wb * 3] - ax;
+    const aby = weldPositions[wb * 3 + 1] - ay;
+    const abz = weldPositions[wb * 3 + 2] - az;
+    const acx = weldPositions[wc * 3] - ax;
+    const acy = weldPositions[wc * 3 + 1] - ay;
+    const acz = weldPositions[wc * 3 + 2] - az;
+
+    // Cross product magnitude is 2x triangle area -> area-weighted normal sum
+    const nx = aby * acz - abz * acy;
+    const ny = abz * acx - abx * acz;
+    const nz = abx * acy - aby * acx;
+
+    wNorm[wa * 3] += nx;
+    wNorm[wa * 3 + 1] += ny;
+    wNorm[wa * 3 + 2] += nz;
+    wNorm[wb * 3] += nx;
+    wNorm[wb * 3 + 1] += ny;
+    wNorm[wb * 3 + 2] += nz;
+    wNorm[wc * 3] += nx;
+    wNorm[wc * 3 + 1] += ny;
+    wNorm[wc * 3 + 2] += nz;
+  }
+
+  for (let w = 0; w < weldCount; w++) {
+    const nx = wNorm[w * 3];
+    const ny = wNorm[w * 3 + 1];
+    const nz = wNorm[w * 3 + 2];
+    const len = Math.hypot(nx, ny, nz);
+    if (len > 1e-10) {
+      const inv = 1 / len;
+      wNorm[w * 3] = nx * inv;
+      wNorm[w * 3 + 1] = ny * inv;
+      wNorm[w * 3 + 2] = nz * inv;
+    } else {
+      wNorm[w * 3] = 0;
+      wNorm[w * 3 + 1] = 1;
+      wNorm[w * 3 + 2] = 0;
+    }
+  }
+
+  // Write seamless welded normals back to every split vertex
+  const normalArr = new Float32Array(vertCount * 3);
+  for (let i = 0; i < vertCount; i++) {
+    const w = vToWeld[i];
+    normalArr[i * 3] = wNorm[w * 3];
+    normalArr[i * 3 + 1] = wNorm[w * 3 + 1];
+    normalArr[i * 3 + 2] = wNorm[w * 3 + 2];
+  }
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normalArr, 3));
+
+  let totalEdgeLen = 0;
+  let edgeCount = 0;
+  for (let w = 0; w < weldCount; w++) {
+    const px = weldPositions[w * 3];
+    const py = weldPositions[w * 3 + 1];
+    const pz = weldPositions[w * 3 + 2];
+    for (const n of neighbors[w]) {
+      if (w < n) {
+        totalEdgeLen += Math.hypot(
+          weldPositions[n * 3] - px,
+          weldPositions[n * 3 + 1] - py,
+          weldPositions[n * 3 + 2] - pz
+        );
+        edgeCount++;
+      }
+    }
+  }
+  const avgEdgeLen = Math.max(edgeCount > 0 ? totalEdgeLen / edgeCount : 0.05, 1e-5);
+
+  const rawConcavity = new Float32Array(weldCount);
+  for (let w = 0; w < weldCount; w++) {
+    const nbrs = neighbors[w];
+    if (nbrs.size === 0) continue;
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    for (const n of nbrs) {
+      sx += weldPositions[n * 3];
+      sy += weldPositions[n * 3 + 1];
+      sz += weldPositions[n * 3 + 2];
+    }
+    const invN = 1 / nbrs.size;
+    const dx = sx * invN - weldPositions[w * 3];
+    const dy = sy * invN - weldPositions[w * 3 + 1];
+    const dz = sz * invN - weldPositions[w * 3 + 2];
+    const dot = dx * wNorm[w * 3] + dy * wNorm[w * 3 + 1] + dz * wNorm[w * 3 + 2];
+    rawConcavity[w] = Math.max(-1.5, Math.min(1.5, dot / avgEdgeLen));
+  }
+
+  let broadConcavity = new Float32Array(rawConcavity);
+  let nextPass = new Float32Array(weldCount);
+  for (let pass = 0; pass < 6; pass++) {
+    for (let w = 0; w < weldCount; w++) {
+      const nbrs = neighbors[w];
+      if (nbrs.size === 0) {
+        nextPass[w] = broadConcavity[w];
+        continue;
+      }
+      let sum = 0;
+      for (const n of nbrs) sum += broadConcavity[n];
+      nextPass[w] = 0.5 * broadConcavity[w] + 0.5 * (sum / nbrs.size);
+    }
+    const tmp = broadConcavity;
+    broadConcavity = nextPass;
+    nextPass = tmp;
+  }
+
+  const wColors = new Float32Array(weldCount * 3);
+  for (let w = 0; w < weldCount; w++) {
+    const curv = 0.35 * rawConcavity[w] + 0.65 * broadConcavity[w];
+    const concavityOcc = Math.max(-0.06, Math.min(0.36, curv * 4.4));
+
+    const px = weldPositions[w * 3];
+    const py = weldPositions[w * 3 + 1];
+    const pz = weldPositions[w * 3 + 2];
+    const wny = wNorm[w * 3 + 1];
+
+    let regionOcc = 0;
+    if (meshName === 'Femur') {
+      if (Math.abs(px) < 0.62 && py > -0.25 && py < 0.8 && pz > -0.65 && pz < 0.55) {
+        const fx = Math.pow(Math.max(0, 1 - (px / 0.62) ** 2), 1.5);
+        const fy = Math.pow(Math.max(0, 1 - ((py - 0.275) / 0.525) ** 2), 1.5);
+        const fz = Math.pow(Math.max(0, 1 - ((pz + 0.05) / 0.6) ** 2), 1.5);
+        regionOcc += fx * fy * fz * 0.24;
+      }
+      if (py > 2.15) {
+        regionOcc += smoothstep01(2.15, 2.7, py) * 0.15;
+      }
+      if (wny > 0.55 && py > 2.4) {
+        regionOcc += smoothstep01(0.55, 0.9, wny) * smoothstep01(2.4, 2.65, py) * 0.18;
+      }
+    } else if (meshName === 'Tibia') {
+      if (Math.abs(px) < 0.58 && py > -0.38) {
+        const fx = Math.pow(Math.max(0, 1 - (px / 0.58) ** 2), 1.5);
+        const fy = smoothstep01(-0.38, -0.02, py);
+        regionOcc += fx * fy * 0.15;
+      }
+      if (py < -1.95) {
+        regionOcc += smoothstep01(-1.95, -2.4, py) * 0.16;
+      }
+      if (wny < -0.55 && py < -2.2) {
+        regionOcc += smoothstep01(-0.55, -0.9, wny) * smoothstep01(-2.2, -2.4, py) * 0.14;
+      }
+    } else if (meshName === 'Fibula') {
+      if (py < -2.25) {
+        regionOcc += smoothstep01(-2.25, -2.65, py) * 0.14;
+      }
+    }
+
+    const occ = Math.max(-0.08, Math.min(0.46, concavityOcc + regionOcc));
+    let r: number;
+    let g: number;
+    let b: number;
+    if (occ <= 0) {
+      const s = -occ / 0.08;
+      r = 0.98 + s * (1.0 - 0.98);
+      g = 0.95 + s * (0.985 - 0.95);
+      b = 0.9 + s * (0.955 - 0.9);
+    } else {
+      const t = occ / 0.46;
+      r = 0.98 - t * (0.98 - 0.54);
+      g = 0.95 - t * (0.95 - 0.43);
+      b = 0.9 - t * (0.9 - 0.32);
+    }
+
+    wColors[w * 3] = r;
+    wColors[w * 3 + 1] = g;
+    wColors[w * 3 + 2] = b;
+  }
+
+  const colors = new Float32Array(vertCount * 3);
+  for (let i = 0; i < vertCount; i++) {
+    const w = vToWeld[i];
+    colors[i * 3] = wColors[w * 3];
+    colors[i * 3 + 1] = wColors[w * 3 + 1];
+    colors[i * 3 + 2] = wColors[w * 3 + 2];
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 
 export interface AnatomyMaterialConfig {
@@ -307,28 +574,32 @@ export function createTissueMaterial(
   if (BONE_NAMES.has(name) || name === 'Patella') {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
-      color: 0xd0c1a8,
-      roughness: 0.7,
+      color: 0xc2ab89,
+      map: bank.boneAlbedo,
+      vertexColors: true,
+      roughness: 0.68,
       metalness: 0.0,
-      clearcoat: 0.06,
-      clearcoatRoughness: 0.65,
-      sheen: 0.14,
-      sheenColor: new THREE.Color(0xcab593),
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.66,
+      sheen: 0.06,
+      sheenColor: new THREE.Color(0xc2ac8c),
       normalMap: bank.boneNormal,
-      normalScale: new THREE.Vector2(0.42, 0.42),
+      normalScale: new THREE.Vector2(0.28, 0.28),
       roughnessMap: bank.boneRoughness,
-      envMapIntensity: 0.42,
+      envMapIntensity: 0.2,
     });
     attachFresnelXrayShader(mat, xrayUniform);
-    mat.userData.baseColorHex = 0xd0c1a8;
+    mat.userData.baseColorHex = 0xc2ab89;
     mat.userData.xrayColorHex = 0xc5d3e6;
+    mat.userData.boneAlbedoMap = bank.boneAlbedo;
+    mat.userData.xrayApplied = false;
     return mat;
   }
 
   if (CARTILAGE_NAMES.has(name)) {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
-      color: 0xd8edf9,
+      color: 0xbce0f5,
       roughness: 0.16,
       metalness: 0.0,
       clearcoat: 0.88,
@@ -336,10 +607,10 @@ export function createTissueMaterial(
       ior: 1.44,
       sheen: 0.22,
       sheenColor: new THREE.Color(0xffffff),
-      envMapIntensity: 0.9,
+      envMapIntensity: 0.62,
     });
     attachFresnelXrayShader(mat, xrayUniform);
-    mat.userData.baseColorHex = 0xd8edf9;
+    mat.userData.baseColorHex = 0xbce0f5;
     mat.userData.xrayColorHex = 0xa9cce3;
     return mat;
   }
@@ -392,28 +663,28 @@ export function createTissueMaterial(
   // Ligaments & Tendons — striated silky collagen fascia
   const collagenTint =
     name === 'ACL'
-      ? 0xe2d2b5
+      ? 0xdcd0ba
       : name === 'PCL'
-        ? 0xd6c2a3
+        ? 0xcfbba0
         : name === 'MCL' || name === 'LCL'
-          ? 0xdfd3bf
-          : 0xebe1d0;
+          ? 0xd8d0c2
+          : 0xd8d1c4;
 
   const mat = new THREE.MeshPhysicalMaterial({
     ...common,
     color: collagenTint,
     map: bank.collagenAlbedo,
     normalMap: bank.collagenNormal,
-    normalScale: new THREE.Vector2(0.26, 0.26),
-    roughness: 0.36,
+    normalScale: new THREE.Vector2(0.42, 0.42),
+    roughness: 0.38,
     metalness: 0.0,
     anisotropy: 0.65,
     anisotropyRotation: Math.PI * 0.5,
-    clearcoat: 0.34,
-    clearcoatRoughness: 0.26,
-    sheen: 0.38,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.28,
+    sheen: 0.32,
     sheenColor: new THREE.Color(0xfff5e4),
-    envMapIntensity: 0.8,
+    envMapIntensity: 0.36,
   });
   mat.userData.baseColorHex = collagenTint;
   return mat;
@@ -425,7 +696,9 @@ function applyBoneXrayState(mat: THREE.MeshPhysicalMaterial, xray: boolean): boo
   mat.transparent = xray;
   mat.opacity = xray ? 0.18 : 1.0;
   mat.depthWrite = !xray;
-  mat.clearcoat = xray ? 0 : 0.06;
+  mat.clearcoat = xray ? 0 : 0.03;
+  mat.vertexColors = !xray;
+  mat.map = xray ? null : ((mat.userData.boneAlbedoMap as THREE.Texture | null) ?? null);
   mat.color.setHex(
     xray ? (mat.userData.xrayColorHex as number) : (mat.userData.baseColorHex as number)
   );
@@ -570,6 +843,7 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
       (name === 'PCL' && isPclBad) ||
       (name === 'MCL' && isMclBad);
 
+    const isBone = BONE_NAMES.has(name) || name === 'Patella';
     if (isPatho) {
       mat.emissive.setHex(0x7f1d1d);
       mat.emissiveIntensity = isSelected ? 0.55 : 0.34;
@@ -580,7 +854,7 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
       }
     } else if (isSelected) {
       mat.emissive.setHex(0x0ea5e9);
-      mat.emissiveIntensity = 0.36;
+      mat.emissiveIntensity = isBone ? 0.06 : 0.34;
       if (name === 'ACL' && mat.transparent) {
         mat.transparent = false;
         mat.opacity = 1.0;
@@ -588,7 +862,7 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
       }
     } else if (isHovered) {
       mat.emissive.setHex(0x0284c7);
-      mat.emissiveIntensity = 0.16;
+      mat.emissiveIntensity = isBone ? 0.04 : 0.16;
     } else {
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 0;
