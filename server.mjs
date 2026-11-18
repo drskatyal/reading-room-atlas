@@ -34,7 +34,7 @@ app.use(
 );
 
 app.get('/{*splat}', (_req, res) => {
-  res.sendFile(path.join(distDir, 'index.html'));
+  res.sendFile('index.html', { root: distDir });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

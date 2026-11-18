@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ChevronDown,
+  Crosshair,
+  Hand,
+  Maximize2,
+  Minus,
+  Palette,
+  Plus,
+  SlidersHorizontal,
+} from 'lucide-react';
+import {
   DRAG_MODE,
   MULTIPLANAR_TYPE,
   Niivue,
@@ -7,15 +17,16 @@ import {
   SLICE_TYPE,
   type NiiVueLocation,
 } from '@niivue/niivue';
-import { motion } from 'motion/react';
 import { MRI_CONTRAST_PRESETS, STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
   KneeLandmarks,
+  MriAnnotation,
   MriContrastPreset,
   MriOverlayMode,
   MriPlaneMode,
   StructureId,
 } from '../types/atlas';
+import { MriPathologyOverlay } from './MriPathologyOverlay';
 
 interface RealKneeMriViewerProps {
   landmarks: KneeLandmarks | null;
@@ -23,13 +34,22 @@ interface RealKneeMriViewerProps {
   onContrastChange: (preset: MriContrastPreset) => void;
   planeMode: MriPlaneMode;
   onPlaneModeChange: (plane: MriPlaneMode) => void;
-  activeStructure: StructureId;
+  mriZoom: number;
+  onMriZoomChange: (zoom: number) => void;
   targetRasMm: [number, number, number] | null;
+  targetBadge?: string;
+  mriAnnotations?: MriAnnotation[];
+  showTargetPointer: boolean;
+  onToggleTargetPointer: () => void;
+  hideTargetForQuiz?: boolean;
+  quizCandidateStructures?: StructureId[];
+  overlayModeProp?: MriOverlayMode;
+  onOverlayModeChange?: (mode: MriOverlayMode) => void;
   onRasCrosshairChange: (mm: [number, number, number]) => void;
   onSelectStructureFromMri: (id: StructureId) => void;
+  onQuizMriClick?: (id: StructureId) => void;
 }
 
-// Clinical 16-structure palette (subtle medical atlas tones when segmentation overlay is toggled ON)
 const SEG_COLORMAP = {
   R: [0, 212, 204, 192, 218, 124, 108, 102, 134, 48, 38, 217, 174, 86, 98, 206, 196],
   G: [0, 202, 194, 184, 208, 206, 194, 186, 212, 178, 152, 166, 132, 192, 198, 168, 158],
@@ -38,7 +58,6 @@ const SEG_COLORMAP = {
   I: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
 };
 
-// Stanford OpenMSK Quantitative Subregional Cartilage & Meniscus Palette
 const SUBREGION_COLORMAP = {
   R: [0, 126, 0, 82, 108, 45, 38, 198, 190, 205, 0, 92, 218, 56, 226, 48],
   G: [0, 208, 0, 186, 202, 168, 148, 190, 182, 196, 0, 164, 154, 194, 116, 138],
@@ -75,19 +94,72 @@ const SUBREGION_NAMES: Record<number, string> = {
   7: 'Femur',
   8: 'Tibia',
   9: 'Patella',
-  11: 'Trochlear Femoral Cartilage',
-  12: 'Medial Weight-Bearing Femoral Cartilage',
-  13: 'Lateral Weight-Bearing Femoral Cartilage',
-  14: 'Posterior Medial Femoral Cartilage',
-  15: 'Posterior Lateral Femoral Cartilage',
+  11: 'Trochlear Cartilage',
+  12: 'Med. Weight-Bearing Cartilage',
+  13: 'Lat. Weight-Bearing Cartilage',
+  14: 'Post. Med. Femoral Cartilage',
+  15: 'Post. Lat. Femoral Cartilage',
 };
 
 const PLANE_OPTIONS: Array<{ id: MriPlaneMode; label: string; sliceType: SLICE_TYPE }> = [
   { id: 'sagittal', label: 'Sagittal', sliceType: SLICE_TYPE.SAGITTAL },
   { id: 'coronal', label: 'Coronal', sliceType: SLICE_TYPE.CORONAL },
   { id: 'axial', label: 'Axial', sliceType: SLICE_TYPE.AXIAL },
-  { id: 'multiplanar', label: '3-Plane MPR', sliceType: SLICE_TYPE.MULTIPLANAR },
+  { id: 'multiplanar', label: 'MPR', sliceType: SLICE_TYPE.MULTIPLANAR },
 ];
+
+function clampZoom(z: number): number {
+  return Number(Math.max(1.0, Math.min(3.5, z)).toFixed(2));
+}
+
+function applyCenteredZoom(
+  nv: Niivue,
+  zoom: number,
+  focusMm: [number, number, number] | null
+): void {
+  if (!nv.volumes[0]) return;
+  if (zoom <= 1.02 || !focusMm) {
+    nv.setPan2Dxyzmm([0, 0, 0, 1.0]);
+    return;
+  }
+  const vc = nv.frac2mm([0.5, 0.5, 0.5]);
+  nv.setPan2Dxyzmm([
+    vc[0] - zoom * focusMm[0],
+    vc[1] - zoom * focusMm[1],
+    vc[2] - zoom * focusMm[2],
+    zoom,
+  ]);
+}
+
+function findNearestLandmarkStructure(
+  mm: [number, number, number],
+  landmarks: KneeLandmarks | null,
+  candidates?: StructureId[],
+  maxDistMm = 18
+): StructureId | null {
+  if (!landmarks) return null;
+  const pool =
+    candidates && candidates.length > 0
+      ? candidates
+      : (Object.keys(STRUCTURES_INFO) as StructureId[]);
+
+  let bestId: StructureId | null = null;
+  let bestDist = maxDistMm;
+  for (const sid of pool) {
+    const lm = landmarks.structures[sid];
+    if (!lm) continue;
+    const d = Math.hypot(
+      mm[0] - lm.centroidRas[0],
+      mm[1] - lm.centroidRas[1],
+      mm[2] - lm.centroidRas[2]
+    );
+    if (d < bestDist) {
+      bestDist = d;
+      bestId = sid;
+    }
+  }
+  return bestId;
+}
 
 export function RealKneeMriViewer({
   landmarks,
@@ -95,51 +167,263 @@ export function RealKneeMriViewer({
   onContrastChange,
   planeMode,
   onPlaneModeChange,
-  activeStructure,
+  mriZoom,
+  onMriZoomChange,
   targetRasMm,
+  targetBadge,
+  mriAnnotations = [],
+  showTargetPointer,
+  onToggleTargetPointer,
+  hideTargetForQuiz = false,
+  quizCandidateStructures,
+  overlayModeProp,
+  onOverlayModeChange,
   onRasCrosshairChange,
   onSelectStructureFromMri,
+  onQuizMriClick,
 }: RealKneeMriViewerProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wlPopoverRef = useRef<HTMLDivElement>(null);
+
   const nvRef = useRef<Niivue | null>(null);
   const readyRef = useRef(false);
   const baseLoadedRef = useRef(false);
   const loadedOverlayFileRef = useRef<'atlas' | 'subregions'>('atlas');
   const suppressingSyncRef = useRef(false);
-  const planeModeRef = useRef(planeMode);
-  const overlayModeRef = useRef<MriOverlayMode>('none');
-  const targetRasRef = useRef(targetRasMm);
+  const userClickedAtRef = useRef(0);
+  const currentMmRef = useRef<[number, number, number]>([112.6, 20.6, -11.9]);
+
+  const propsRef = useRef({
+    planeMode,
+    mriZoom,
+    targetRasMm,
+    showTargetPointer,
+    hideTargetForQuiz,
+    landmarks,
+    quizCandidateStructures,
+    onRasCrosshairChange,
+    onSelectStructureFromMri,
+    onQuizMriClick,
+    onMriZoomChange,
+  });
+  propsRef.current = {
+    planeMode,
+    mriZoom,
+    targetRasMm,
+    showTargetPointer,
+    hideTargetForQuiz,
+    landmarks,
+    quizCandidateStructures,
+    onRasCrosshairChange,
+    onSelectStructureFromMri,
+    onQuizMriClick,
+    onMriZoomChange,
+  };
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [overlayMode, setOverlayMode] = useState<MriOverlayMode>('none');
-  const [segOpacity, setSegOpacity] = useState(0.28);
-  const [crosshairVisible, setCrosshairVisible] = useState(true);
+  const [wlMenuOpen, setWlMenuOpen] = useState(false);
+  const [internalOverlayMode, setInternalOverlayMode] = useState<MriOverlayMode>('none');
+  const overlayMode = overlayModeProp ?? internalOverlayMode;
+  const setOverlayMode = useCallback(
+    (next: MriOverlayMode | ((prev: MriOverlayMode) => MriOverlayMode)) => {
+      const resolved = typeof next === 'function' ? next(overlayModeRef.current) : next;
+      setInternalOverlayMode(resolved);
+      onOverlayModeChange?.(resolved);
+    },
+    [onOverlayModeChange]
+  );
+  const [segOpacity, setSegOpacity] = useState(0.32);
+  const [dragAction, setDragAction] = useState<'pan' | 'contrast'>('pan');
   const [sliceFrac, setSliceFrac] = useState(0.5);
-  const [rasReadout, setRasReadout] = useState<[number, number, number]>([112, 21, -12]);
   const [tissueUnderCursor, setTissueUnderCursor] = useState<string | null>(null);
+  const [canvasBox, setCanvasBox] = useState({ w: 0, h: 0 });
+  const [pxPerMm, setPxPerMm] = useState(4.0);
+  const [, setRenderTick] = useState(0);
+  const [spotlight, setSpotlight] = useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+    offSlice: boolean;
+  }>({ x: 0, y: 0, visible: false, offSlice: false });
 
-  useEffect(() => {
-    planeModeRef.current = planeMode;
-    overlayModeRef.current = overlayMode;
-    targetRasRef.current = targetRasMm;
-  }, [planeMode, overlayMode, targetRasMm]);
+  const overlayModeRef = useRef<MriOverlayMode>('none');
+  overlayModeRef.current = overlayMode;
+
+  const projectRas = useCallback((ras: [number, number, number]): [number, number] | null => {
+    const nv = nvRef.current;
+    const canvas = canvasRef.current;
+    if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !canvas) return null;
+    const slices = nv.screenSlices;
+    if (!slices || slices.length === 0) return null;
+
+    const plane = propsRef.current.planeMode;
+    const targetSliceType =
+      plane === 'axial'
+        ? SLICE_TYPE.AXIAL
+        : plane === 'coronal'
+          ? SLICE_TYPE.CORONAL
+          : SLICE_TYPE.SAGITTAL;
+
+    const tile =
+      slices.find(
+        (s) =>
+          s.axCorSag === targetSliceType &&
+          s.fovMM?.length >= 2 &&
+          s.leftTopMM?.length >= 2 &&
+          s.leftTopWidthHeight?.length >= 4 &&
+          s.fovMM[0] !== 0 &&
+          s.fovMM[1] !== 0
+      ) ??
+      slices.find(
+        (s) =>
+          s.axCorSag <= SLICE_TYPE.SAGITTAL &&
+          s.fovMM?.length >= 2 &&
+          s.leftTopMM?.length >= 2 &&
+          s.leftTopWidthHeight?.length >= 4 &&
+          s.fovMM[0] !== 0 &&
+          s.fovMM[1] !== 0
+      );
+    if (!tile) return null;
+
+    let xMM = ras[0];
+    let yMM = ras[1];
+    if (tile.axCorSag === SLICE_TYPE.CORONAL) {
+      xMM = ras[0];
+      yMM = ras[2];
+    } else if (tile.axCorSag === SLICE_TYPE.SAGITTAL) {
+      xMM = ras[1];
+      yMM = ras[2];
+    }
+
+    const fracX = (xMM - tile.leftTopMM[0]) / tile.fovMM[0];
+    const fracY = (yMM - tile.leftTopMM[1]) / tile.fovMM[1];
+
+    const ltwh = tile.leftTopWidthHeight;
+    let left = ltwh[0];
+    const top = ltwh[1];
+    let width = ltwh[2];
+    const height = ltwh[3];
+    let screenFracX = fracX;
+    if (width < 0) {
+      left += width;
+      width = -width;
+      screenFracX = 1 - fracX;
+    }
+    const screenFracY = 1 - fracY;
+    const devX = left + screenFracX * width;
+    const devY = top + screenFracY * height;
+
+    const sx = canvas.clientWidth / Math.max(1, canvas.width);
+    const sy = canvas.clientHeight / Math.max(1, canvas.height);
+    return [devX * sx, devY * sy];
+  }, []);
 
   const presetMeta = useMemo(
-    () =>
-      MRI_CONTRAST_PRESETS.find((s) => s.id === contrastPreset) ?? MRI_CONTRAST_PRESETS[0],
+    () => MRI_CONTRAST_PRESETS.find((s) => s.id === contrastPreset) ?? MRI_CONTRAST_PRESETS[0],
     [contrastPreset]
   );
 
-  // Initialize NiiVue once with clean clinical PACS settings + trilinear interpolation
+  // Close W/L dropdown on outside click
+  useEffect(() => {
+    if (!wlMenuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (wlPopoverRef.current && !wlPopoverRef.current.contains(e.target as Node)) {
+        setWlMenuOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [wlMenuOpen]);
+
+  const recomputeSpotlight = useCallback(() => {
+    const nv = nvRef.current;
+    const canvas = canvasRef.current;
+    const p = propsRef.current;
+    if (canvas) {
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+      setCanvasBox((prev) => (prev.w === cw && prev.h === ch ? prev : { w: cw, h: ch }));
+    }
+
+    if (
+      !nv ||
+      !canvas ||
+      !baseLoadedRef.current ||
+      !nv.volumes[0] ||
+      !p.showTargetPointer ||
+      p.hideTargetForQuiz ||
+      !p.targetRasMm
+    ) {
+      setSpotlight((prev) =>
+        prev.visible || prev.offSlice ? { x: 0, y: 0, visible: false, offSlice: false } : prev
+      );
+      return;
+    }
+
+    const cur = currentMmRef.current;
+    const tgt = p.targetRasMm;
+    const perpDist =
+      p.planeMode === 'multiplanar'
+        ? 0
+        : p.planeMode === 'coronal'
+          ? Math.abs(cur[1] - tgt[1])
+          : p.planeMode === 'axial'
+            ? Math.abs(cur[2] - tgt[2])
+            : Math.abs(cur[0] - tgt[0]);
+
+    if (perpDist > 16.0) {
+      setSpotlight((prev) =>
+        !prev.offSlice || prev.visible ? { x: 0, y: 0, visible: false, offSlice: true } : prev
+      );
+      return;
+    }
+
+    const pMain = projectRas(tgt);
+    if (!pMain) {
+      setSpotlight((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    const stepVec: [number, number, number] =
+      p.planeMode === 'axial' ? [tgt[0] + 10, tgt[1], tgt[2]] : [tgt[0], tgt[1], tgt[2] + 10];
+    const pStep = projectRas(stepVec);
+    if (pStep) {
+      const measured = Math.max(1.5, Math.min(18, Math.hypot(pStep[0] - pMain[0], pStep[1] - pMain[1]) / 10));
+      setPxPerMm((prev) => (Math.abs(prev - measured) < 0.08 ? prev : measured));
+    }
+
+    const [x, y] = pMain;
+    const inBounds =
+      x >= 10 &&
+      x <= canvas.clientWidth - 10 &&
+      y >= 10 &&
+      y <= canvas.clientHeight - 10;
+
+    setSpotlight((prev) => {
+      if (
+        prev.visible === inBounds &&
+        prev.offSlice === false &&
+        Math.abs(prev.x - x) < 0.7 &&
+        Math.abs(prev.y - y) < 0.7
+      ) {
+        return prev;
+      }
+      return { x, y, visible: inBounds, offSlice: false };
+    });
+    setRenderTick((t) => (t + 1) % 10000);
+  }, [projectRas]);
+
+  // Initialize NiiVue once
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let disposed = false;
 
     const nv = new Niivue({
-      backColor: [0.008, 0.012, 0.024, 1],
-      crosshairColor: [0.58, 0.78, 0.98, 0.55],
+      backColor: [0.01, 0.015, 0.028, 1],
+      crosshairColor: [0.49, 0.83, 0.99, 0.62],
       crosshairWidth: 0.45,
       show3Dcrosshair: false,
       isSliceMM: true,
@@ -148,8 +432,8 @@ export function RealKneeMriViewer({
       isCornerOrientationText: false,
       isOrientationTextVisible: true,
       textHeight: 0.028,
-      fontColor: [0.85, 0.89, 0.94, 0.82],
-      dragMode: DRAG_MODE.contrast,
+      fontColor: [0.86, 0.9, 0.96, 0.84],
+      dragMode: DRAG_MODE.pan,
       multiplanarLayout: MULTIPLANAR_TYPE.GRID,
       multiplanarShowRender: SHOW_RENDER.NEVER,
       sliceType: SLICE_TYPE.SAGITTAL,
@@ -165,7 +449,7 @@ export function RealKneeMriViewer({
         Number(loc.mm[1].toFixed(1)),
         Number(loc.mm[2].toFixed(1)),
       ];
-      setRasReadout(mm);
+      currentMmRef.current = mm;
 
       const axisIdx =
         nv.opts.sliceType === SLICE_TYPE.CORONAL
@@ -178,7 +462,9 @@ export function RealKneeMriViewer({
       }
 
       const segSample = loc.values?.[1]?.value;
-      if (typeof segSample === 'number') {
+      const p = propsRef.current;
+
+      if (!p.hideTargetForQuiz && typeof segSample === 'number') {
         const rounded = Math.round(segSample);
         if (overlayModeRef.current === 'subregions') {
           setTissueUnderCursor(SUBREGION_NAMES[rounded] ?? null);
@@ -190,16 +476,44 @@ export function RealKneeMriViewer({
         setTissueUnderCursor(null);
       }
 
-      if (!suppressingSyncRef.current) {
-        onRasCrosshairChange(mm);
+      const justClicked = performance.now() - userClickedAtRef.current < 320;
+      if (justClicked && !suppressingSyncRef.current) {
+        userClickedAtRef.current = 0;
+        let pickedId: StructureId | null = null;
+        if (
+          loadedOverlayFileRef.current === 'atlas' &&
+          typeof segSample === 'number' &&
+          Math.round(segSample) > 0
+        ) {
+          pickedId = LABEL_INDEX_TO_ID[Math.round(segSample)] ?? null;
+        }
+        if (!pickedId) {
+          pickedId = findNearestLandmarkStructure(
+            mm,
+            p.landmarks,
+            p.hideTargetForQuiz ? p.quizCandidateStructures : undefined,
+            p.hideTargetForQuiz ? 22 : 18
+          );
+        }
+        if (pickedId) {
+          if (p.hideTargetForQuiz && p.onQuizMriClick) {
+            p.onQuizMriClick(pickedId);
+          } else {
+            p.onSelectStructureFromMri(pickedId);
+          }
+        }
       }
+
+      if (!suppressingSyncRef.current) {
+        p.onRasCrosshairChange(mm);
+      }
+      recomputeSpotlight();
     };
 
     (async () => {
       try {
         await nv.attachToCanvas(canvas);
         if (disposed) return;
-        // Enable smooth trilinear MPR interpolation for high-res coronal & axial reconstructions
         nv.setInterpolation(true);
         readyRef.current = true;
 
@@ -214,7 +528,6 @@ export function RealKneeMriViewer({
             trustCalMinMax: true,
           },
           {
-            // Preload 16-tissue label volume at opacity 0 for instant hover anatomy & toggle
             url: '/volumes/knee-invivo-seg.nii.gz',
             opacity: 0,
             cal_min: 0,
@@ -231,14 +544,10 @@ export function RealKneeMriViewer({
           nv.setOpacity(1, 0);
         }
         nv.setSliceMM(true);
-        const match = PLANE_OPTIONS.find((p) => p.id === planeModeRef.current);
-        if (match) {
-          nv.setSliceType(match.sliceType);
-        }
-        nv.setPan2Dxyzmm([0, 0, 0, 1.05]);
-        nv.updateGLVolume();
+        const match = PLANE_OPTIONS.find((opt) => opt.id === propsRef.current.planeMode);
+        if (match) nv.setSliceType(match.sliceType);
 
-        const ras = targetRasRef.current;
+        const ras = propsRef.current.targetRasMm;
         if (ras && nv.volumes[0]) {
           suppressingSyncRef.current = true;
           const frac = nv.mm2frac(ras);
@@ -247,18 +556,23 @@ export function RealKneeMriViewer({
             Math.max(0.02, Math.min(0.98, frac[1])),
             Math.max(0.02, Math.min(0.98, frac[2])),
           ];
+          currentMmRef.current = ras;
+          applyCenteredZoom(nv, propsRef.current.mriZoom, ras);
+          nv.updateGLVolume();
           nv.drawScene();
           nv.createOnLocationChange();
+          window.requestAnimationFrame(() => recomputeSpotlight());
           window.setTimeout(() => {
             suppressingSyncRef.current = false;
           }, 50);
+        } else {
+          applyCenteredZoom(nv, propsRef.current.mriZoom, null);
+          nv.updateGLVolume();
         }
         setLoading(false);
       } catch (err) {
         if (!disposed) {
-          setErrorMsg(
-            err instanceof Error ? err.message : 'Unable to initialize 3T qDESS MRI viewer'
-          );
+          setErrorMsg(err instanceof Error ? err.message : 'Unable to load 3T qDESS MRI volume');
           setLoading(false);
         }
       }
@@ -270,39 +584,107 @@ export function RealKneeMriViewer({
       baseLoadedRef.current = false;
       nvRef.current = null;
     };
-  }, [onRasCrosshairChange]);
+  }, [recomputeSpotlight]);
 
-  // Instant Window/Level preset update (zero network reload!)
+  // ResizeObserver + Canvas Click/Pan & Ctrl+Wheel Zoom Listeners
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+
+    let downPos: { x: number; y: number } | null = null;
+    let dragging = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      downPos = { x: e.clientX, y: e.clientY };
+      dragging = true;
+    };
+    const onPointerMove = () => {
+      if (dragging) {
+        recomputeSpotlight();
+      }
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      dragging = false;
+      if (downPos) {
+        const d = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+        downPos = null;
+        if (d < 5) {
+          userClickedAtRef.current = performance.now();
+        }
+      }
+      window.requestAnimationFrame(() => recomputeSpotlight());
+    };
+
+    const onWheelCapture = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY < 0 ? 0.2 : -0.2;
+        propsRef.current.onMriZoomChange(clampZoom(propsRef.current.mriZoom + delta));
+      } else {
+        window.requestAnimationFrame(() => recomputeSpotlight());
+      }
+    };
+
+    const ro = new ResizeObserver(() => {
+      const nv = nvRef.current;
+      if (nv && readyRef.current) {
+        nv.resizeListener?.();
+        nv.drawScene();
+        recomputeSpotlight();
+        window.requestAnimationFrame(() => recomputeSpotlight());
+      }
+    });
+    ro.observe(wrap);
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    wrap.addEventListener('wheel', onWheelCapture, { capture: true, passive: false });
+
+    return () => {
+      ro.disconnect();
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      wrap.removeEventListener('wheel', onWheelCapture, { capture: true });
+    };
+  }, [recomputeSpotlight]);
+
+  // W/L Preset Sync
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !baseLoadedRef.current || !nv.volumes[0]) return;
-    const presetWl = landmarks?.wlPresets?.[contrastPreset] ?? {
+    const wl = landmarks?.wlPresets?.[contrastPreset] ?? {
       min: presetMeta.defaultMin,
       max: presetMeta.defaultMax,
     };
-    nv.volumes[0].cal_min = presetWl.min;
-    nv.volumes[0].cal_max = presetWl.max;
+    nv.volumes[0].cal_min = wl.min;
+    nv.volumes[0].cal_max = wl.max;
     nv.updateGLVolume();
-  }, [contrastPreset, landmarks, presetMeta]);
+  }, [contrastPreset, landmarks, presetMeta, loading]);
 
-  // Sync plane mode
+  // Drag Mode Sync (Pan vs W/L)
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || !readyRef.current) return;
+    nv.setDragMode(dragAction === 'pan' ? DRAG_MODE.pan : DRAG_MODE.contrast);
+  }, [dragAction]);
+
+  // Plane Mode Sync
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !readyRef.current) return;
     const match = PLANE_OPTIONS.find((p) => p.id === planeMode);
     if (match) {
       nv.setSliceType(match.sliceType);
+      applyCenteredZoom(nv, mriZoom, targetRasMm);
+      window.requestAnimationFrame(() => recomputeSpotlight());
     }
-  }, [planeMode]);
+  }, [planeMode, mriZoom, targetRasMm, recomputeSpotlight]);
 
-  // Sync crosshair visibility (toggleable thin 0.45px PACS line vs pure unblemished film)
-  useEffect(() => {
-    const nv = nvRef.current;
-    if (!nv || !readyRef.current) return;
-    nv.setCrosshairWidth(crosshairVisible ? 0.45 : 0);
-  }, [crosshairVisible]);
-
-  // Sync overlay mode ('none' | 'atlas' | 'subregions') and opacity without reloading base MRI
+  // Segmentation Overlay Sync
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !baseLoadedRef.current) return;
@@ -340,7 +722,7 @@ export function RealKneeMriViewer({
           }
           nv.updateGLVolume();
         } catch {
-          // Graceful fallback if overlay switch interrupted
+          // Safe fallback if interrupted mid-load
         }
       } else if (nv.volumes[1]) {
         nv.setOpacity(1, segOpacity);
@@ -351,25 +733,9 @@ export function RealKneeMriViewer({
     return () => {
       cancelled = true;
     };
-  }, [overlayMode, segOpacity]);
+  }, [overlayMode, segOpacity, loading]);
 
-  // Shortcuts: O cycles Seg overlay, C toggles PACS Crosshair
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      const key = e.key.toLowerCase();
-      if (key === 'o') {
-        setOverlayMode((m) => (m === 'none' ? 'atlas' : m === 'atlas' ? 'subregions' : 'none'));
-      } else if (key === 'c') {
-        setCrosshairVisible((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  // Jump MRI crosshair when 3D structure or chapter requests a RAS target
+  // Crosshair & Centered Zoom Sync on Target RAS change
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !targetRasMm) return;
@@ -380,12 +746,55 @@ export function RealKneeMriViewer({
       Math.max(0.01, Math.min(0.99, frac[1])),
       Math.max(0.01, Math.min(0.99, frac[2])),
     ];
+    currentMmRef.current = targetRasMm;
+    applyCenteredZoom(nv, mriZoom, targetRasMm);
     nv.drawScene();
     nv.createOnLocationChange();
+    window.requestAnimationFrame(() => recomputeSpotlight());
     window.setTimeout(() => {
       suppressingSyncRef.current = false;
-    }, 40);
-  }, [targetRasMm]);
+    }, 50);
+  }, [targetRasMm, mriZoom, recomputeSpotlight]);
+
+  // Refresh vector overlay positions immediately whenever sub-step annotations change or initial volume load finishes
+  useEffect(() => {
+    window.requestAnimationFrame(() => recomputeSpotlight());
+  }, [mriAnnotations, recomputeSpotlight]);
+
+  useEffect(() => {
+    if (!loading) {
+      window.requestAnimationFrame(() => recomputeSpotlight());
+    }
+  }, [loading, recomputeSpotlight]);
+
+  // Keyboard shortcut O toggles Anatomy Colors
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key.toLowerCase() === 'o') {
+        setOverlayMode((m) => (m === 'none' ? 'atlas' : 'none'));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setOverlayMode]);
+
+  const jumpToTargetSlice = () => {
+    const nv = nvRef.current;
+    if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !targetRasMm) return;
+    const frac = nv.mm2frac(targetRasMm);
+    nv.scene.crosshairPos = [
+      Math.max(0.01, Math.min(0.99, frac[0])),
+      Math.max(0.01, Math.min(0.99, frac[1])),
+      Math.max(0.01, Math.min(0.99, frac[2])),
+    ];
+    currentMmRef.current = targetRasMm;
+    applyCenteredZoom(nv, mriZoom, targetRasMm);
+    nv.drawScene();
+    nv.createOnLocationChange();
+    window.requestAnimationFrame(() => recomputeSpotlight());
+  };
 
   const handleSliceScrub = (nextFrac: number) => {
     setSliceFrac(nextFrac);
@@ -399,200 +808,254 @@ export function RealKneeMriViewer({
     nv.createOnLocationChange();
   };
 
-  const jumpToStructure = useCallback(
-    (id: StructureId) => {
-      onSelectStructureFromMri(id);
-      const lm = landmarks?.structures[id];
-      const nv = nvRef.current;
-      if (lm && nv && nv.volumes[0]) {
-        const frac = nv.mm2frac(lm.centroidRas);
-        nv.scene.crosshairPos = [
-          Math.max(0.01, Math.min(0.99, frac[0])),
-          Math.max(0.01, Math.min(0.99, frac[1])),
-          Math.max(0.01, Math.min(0.99, frac[2])),
-        ];
-        nv.drawScene();
-        nv.createOnLocationChange();
-      }
-    },
-    [landmarks, onSelectStructureFromMri]
-  );
-
   return (
     <section className="stage-pane" aria-label="In-Vivo 3T Knee qDESS MRI Viewer">
-      <div className="pane-header">
-        <div className="pane-heading">
-          <h2 className="pane-title">In-Vivo 3T qDESS MRI</h2>
-          <span className="pane-note">{presetMeta.spec}</span>
+      {/* Simplified Header: Plane Tabs + Target Pointer + Colors + W/L Popover */}
+      <header className="pane-header">
+        <div className="pane-title-group">
+          <span className="pane-title">3T qDESS MRI</span>
+          <span className="pane-badge">{presetMeta.shortLabel}</span>
         </div>
 
-        <div className="seg-group" role="tablist" aria-label="PACS window level preset">
-          {MRI_CONTRAST_PRESETS.map((wl) => {
-            const active = wl.id === contrastPreset;
-            return (
+        <div className="pane-actions">
+          <div className="segmented-pill" role="tablist" aria-label="MRI imaging plane">
+            {PLANE_OPTIONS.map((opt) => (
               <button
-                key={wl.id}
+                key={opt.id}
                 type="button"
                 role="tab"
-                aria-selected={active}
-                className={`seg-btn ${active ? 'active' : ''}`}
-                onClick={() => onContrastChange(wl.id)}
+                aria-selected={planeMode === opt.id}
+                className={`pill-btn ${planeMode === opt.id ? 'active' : ''}`}
+                onClick={() => onPlaneModeChange(opt.id)}
               >
-                {active && (
-                  <motion.span
-                    layoutId="mri-wl-pill"
-                    className="seg-indicator"
-                    transition={{ type: 'spring', stiffness: 520, damping: 38 }}
-                  />
-                )}
-                {wl.shortLabel}
+                {opt.label}
               </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mri-stage">
-        <div className="mri-subbar">
-          <div className="seg-group" role="tablist" aria-label="MRI plane">
-            {PLANE_OPTIONS.map((opt) => {
-              const active = opt.id === planeMode;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className={`seg-btn ${active ? 'active' : ''}`}
-                  onClick={() => onPlaneModeChange(opt.id)}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="mri-plane-pill"
-                      className="seg-indicator"
-                      transition={{ type: 'spring', stiffness: 520, damping: 38 }}
-                    />
-                  )}
-                  {opt.label}
-                </button>
-              );
-            })}
+            ))}
           </div>
 
-          <div className="mri-hud-pill">
-            <span>
-              RAS ({rasReadout[0]}, {rasReadout[1]}, {rasReadout[2]}) mm
-            </span>
-            {tissueUnderCursor && (
-              <span style={{ color: 'var(--accent-telemetry)' }}>· {tissueUnderCursor}</span>
+          {!hideTargetForQuiz && (
+            <button
+              type="button"
+              className={`chip-btn ${showTargetPointer ? 'active' : ''}`}
+              onClick={onToggleTargetPointer}
+              title="Toggle on-MRI pathology & directional overlays (H)"
+            >
+              <Crosshair size={13} />
+              <span>Overlays</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`chip-btn ${overlayMode !== 'none' ? 'active' : ''}`}
+            onClick={() => setOverlayMode((m) => (m === 'none' ? 'atlas' : 'none'))}
+            title="Toggle anatomical color overlay (O)"
+          >
+            <Palette size={13} />
+            <span>Colors</span>
+          </button>
+
+          <div className="popover-anchor" ref={wlPopoverRef}>
+            <button
+              type="button"
+              className={`chip-btn ${wlMenuOpen ? 'active' : ''}`}
+              onClick={() => setWlMenuOpen((v) => !v)}
+              aria-expanded={wlMenuOpen}
+            >
+              <SlidersHorizontal size={13} />
+              <span>W/L</span>
+              <ChevronDown size={12} />
+            </button>
+
+            {wlMenuOpen && (
+              <div className="popover-panel" role="dialog" aria-label="Window Level and Overlays">
+                <div className="popover-section">
+                  <div className="popover-heading">Window / Level Presets</div>
+                  <div className="wl-list">
+                    {MRI_CONTRAST_PRESETS.map((wl) => (
+                      <button
+                        key={wl.id}
+                        type="button"
+                        className={`wl-option ${wl.id === contrastPreset ? 'active' : ''}`}
+                        onClick={() => {
+                          onContrastChange(wl.id);
+                          setWlMenuOpen(false);
+                        }}
+                      >
+                        <span className="wl-name">{wl.label}</span>
+                        <span className="wl-spec">{wl.spec}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="popover-section">
+                  <div className="popover-heading">Color Overlay Mode</div>
+                  <div className="camera-grid">
+                    {(
+                      [
+                        ['none', 'Clean Grayscale'],
+                        ['atlas', '16-Tissue Atlas'],
+                        ['subregions', 'OA Subregions'],
+                      ] as Array<[MriOverlayMode, string]>
+                    ).map(([modeId, lbl]) => (
+                      <button
+                        key={modeId}
+                        type="button"
+                        className={`mini-chip ${overlayMode === modeId ? 'active' : ''}`}
+                        onClick={() => setOverlayMode(modeId)}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+
+                  {overlayMode !== 'none' && (
+                    <label className="opacity-row">
+                      <span>Opacity ({Math.round(segOpacity * 100)}%)</span>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={0.75}
+                        step={0.05}
+                        value={segOpacity}
+                        onChange={(e) => setSegOpacity(Number(e.target.value))}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
+      </header>
 
-        <div className="niivue-canvas-wrap">
-          <canvas
-            ref={canvasRef}
-            className="niivue-canvas"
-            aria-label="OpenMSK in-vivo 3T qDESS Right Knee MRI canvas"
+      {/* MRI Canvas Viewport + On-MRI Target Spotlight Ring */}
+      <div className="mri-canvas-wrap" ref={wrapRef}>
+        <canvas ref={canvasRef} className="mri-canvas" />
+
+        {loading && !errorMsg && (
+          <div className="viewport-status">
+            <span>Loading 3T qDESS MRI volume…</span>
+          </div>
+        )}
+        {errorMsg && (
+          <div className="viewport-status error">
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* RAS-Registered MRI Pathology Arrows, Tear Clefts & Edema Overlays */}
+        {!loading && (
+          <MriPathologyOverlay
+            annotations={mriAnnotations}
+            visible={showTargetPointer && !hideTargetForQuiz}
+            offSlice={spotlight.offSlice}
+            width={canvasBox.w}
+            height={canvasBox.h}
+            pxPerMm={pxPerMm}
+            projectRas={projectRas}
           />
+        )}
 
-          <div className="pacs-corner pacs-tl">
-            <div>STANFORD OPENMSK · 3.0T 3D qDESS</div>
-            <div>RIGHT KNEE · IN-VIVO</div>
-          </div>
-
-          <div className="pacs-corner pacs-tr">
-            <div>512×512×96 · 0.31×0.31×1.0 mm</div>
-            <div>
-              W/L [{presetMeta.shortLabel}] · BScore {landmarks?.bScore ?? -0.203}
-            </div>
-          </div>
-
-          <div className="pacs-corner pacs-bl">
-            <div>Drag L: W/L · Wheel: Scroll Slices</div>
-          </div>
-
-          {loading && <div className="loading-overlay">Streaming In-Vivo 3T qDESS NIfTI…</div>}
-          {errorMsg && (
-            <div className="loading-overlay" style={{ color: 'var(--accent-crimson)' }}>
-              MRI load error: {errorMsg}
+        {/* Spotlight Ring & Label when viewing normal structures without custom vector diagram */}
+        {!loading &&
+          showTargetPointer &&
+          !hideTargetForQuiz &&
+          mriAnnotations.length === 0 &&
+          spotlight.visible && (
+            <div
+              className="mri-spotlight-overlay"
+              style={{
+                left: `${spotlight.x}px`,
+                top: `${spotlight.y}px`,
+              }}
+              aria-hidden="true"
+            >
+              <div className="mri-spotlight-ring" />
+              {targetBadge && (
+                <div className="mri-spotlight-badge">{targetBadge}</div>
+              )}
             </div>
           )}
+
+        {/* Off-Slice Quick Return */}
+        {!loading && showTargetPointer && !hideTargetForQuiz && spotlight.offSlice && (
+          <button
+            type="button"
+            className="mri-jump-btn"
+            onClick={jumpToTargetSlice}
+          >
+            <Crosshair size={12} />
+            <span>Jump to {targetBadge ?? 'Target'} Slice</span>
+          </button>
+        )}
+
+        {/* Subtle Tissue Under Crosshair Readout */}
+        {!loading && !hideTargetForQuiz && tissueUnderCursor && (
+          <div className="mri-tissue-readout">{tissueUnderCursor}</div>
+        )}
+      </div>
+
+      {/* Bottom Scrubber + Drag Mode Toggle + Landmark-Centered Zoom Bar */}
+      <footer className="mri-footer-bar">
+        <div className="slice-control">
+          <span className="footer-label">Slice</span>
+          <input
+            type="range"
+            className="slice-slider"
+            min={0.05}
+            max={0.95}
+            step={0.005}
+            value={sliceFrac}
+            onChange={(e) => handleSliceScrub(Number(e.target.value))}
+            aria-label="Scroll MRI slices"
+          />
         </div>
 
-        <div className="mri-controls-bar">
-          <label className="slider-inline" htmlFor="mri-slice-scrubber">
-            <span>Slice</span>
-            <input
-              id="mri-slice-scrubber"
-              type="range"
-              min={0.05}
-              max={0.95}
-              step={0.01}
-              value={sliceFrac}
-              onChange={(e) => handleSliceScrub(Number(e.target.value))}
-            />
-            <span className="mono-val">{Math.round(sliceFrac * 100)}%</span>
-          </label>
+        <div className="mri-footer-right">
+          <button
+            type="button"
+            className={`mini-chip ${dragAction === 'pan' ? 'active' : ''}`}
+            onClick={() => setDragAction((d) => (d === 'pan' ? 'contrast' : 'pan'))}
+            title="Switch left-mouse drag between Pan and Window/Level"
+          >
+            <Hand size={12} />
+            <span>Drag: {dragAction === 'pan' ? 'Pan' : 'W/L'}</span>
+          </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+          <div className="zoom-pill" role="group" aria-label="MRI zoom controls">
             <button
               type="button"
-              className={`chip-toggle ${crosshairVisible ? 'active' : ''}`}
-              onClick={() => setCrosshairVisible((v) => !v)}
-              title="Toggle PACS crosshair (Shortcut C)"
+              className="zoom-btn"
+              onClick={() => onMriZoomChange(clampZoom(mriZoom - 0.25))}
+              title="Zoom out MRI"
+              aria-label="Zoom out MRI"
             >
-              Crosshair
+              <Minus size={12} />
+            </button>
+            <span className="zoom-readout">{mriZoom.toFixed(1)}×</span>
+            <button
+              type="button"
+              className="zoom-btn"
+              onClick={() => onMriZoomChange(clampZoom(mriZoom + 0.25))}
+              title="Zoom in MRI onto target (Ctrl+Wheel)"
+              aria-label="Zoom in MRI"
+            >
+              <Plus size={12} />
             </button>
             <button
               type="button"
-              className={`chip-toggle ${overlayMode === 'none' ? 'active' : ''}`}
-              onClick={() => setOverlayMode('none')}
-              title="Unretouched 3T grayscale MRI"
+              className="zoom-reset-btn"
+              onClick={() => onMriZoomChange(1.0)}
+              title="Fit full knee FOV"
             >
-              Clean MRI
-            </button>
-            <button
-              type="button"
-              className={`chip-toggle ${overlayMode === 'atlas' ? 'active' : ''}`}
-              onClick={() => setOverlayMode((m) => (m === 'atlas' ? 'none' : 'atlas'))}
-              title="16-structure segmentation overlay (Shortcut O)"
-            >
-              16-Tissue Seg
-            </button>
-            <button
-              type="button"
-              className={`chip-toggle ${overlayMode === 'subregions' ? 'active' : ''}`}
-              onClick={() => setOverlayMode((m) => (m === 'subregions' ? 'none' : 'subregions'))}
-              title="OpenMSK chondral subregions"
-            >
-              OA Subregions
-            </button>
-
-            {overlayMode !== 'none' && (
-              <input
-                type="range"
-                aria-label="Segmentation overlay opacity"
-                min={0.1}
-                max={0.65}
-                step={0.02}
-                value={segOpacity}
-                onChange={(e) => setSegOpacity(Number(e.target.value))}
-                style={{ width: 58, accentColor: 'var(--accent-telemetry)' }}
-              />
-            )}
-
-            <button
-              type="button"
-              className="chip-toggle"
-              onClick={() => jumpToStructure(activeStructure)}
-              title="Center MRI slice on active 3D structure"
-            >
-              Locate {STRUCTURES_INFO[activeStructure].shortLabel}
+              <Maximize2 size={11} />
+              <span>Fit</span>
             </button>
           </div>
         </div>
-      </div>
+      </footer>
     </section>
   );
 }

@@ -1,14 +1,26 @@
-# ReadingRoom Atlas — Knee 3T MRI & Meniscal / Cruciate Biomechanics
+# ReadingRoom Atlas
 
-Interactive MSK radiology reading workstation pairing a **16-structure PBR 3D segmented right-knee atlas** (with procedural cortical/collagen micro-textures, Fresnel rim X-Ray mode, AO post-processing, and quantitative cartilage thickness mapping) with a **live in-vivo 3.0T sagittal 3D qDESS MRI viewer** powered by NiiVue.
+Synchronized 3T MRI Knee Teaching, Patient Demonstration & 3D Pathology Workstation designed for radiology residents, MSK fellows, and patient education.
 
-## Open Scientific Data & Attribution
-- **Stanford OpenMSK In-Vivo 3T Knee Bundle** (`openmsk.com`): Real living human Right Knee 3.0T 3D qDESS MRI (`512 × 512 × 96` at `0.3125 × 0.3125 × 1.0 mm`), multi-label articular segmentation, subchondral bone/cartilage meshes, per-vertex quantitative chondral thickness (`mm`), and osteoarthritis `BScore` (`-0.203`).  
-  Citation: Goyal A, Belibi F, Sahani V, Pedersen R, Vainberg Y, Williams A, Chu C, Haddock B, Gold GE, Chaudhari AS, Kogan F, Gatti AA. *OpenMSK: A modular open-source framework for comprehensive analysis of imaging biomarkers in knee osteoarthritis.* Osteoarthritis and Cartilage Open. 2026;8(4):100886. `doi:10.1016/j.ocarto.2026.100886`.
-- **NIH / Cleveland Clinic Open Knee(s)** (`R01GM104139`, CC-BY 4.0): Soft-tissue ligament & extensor tendon morphology (`ACL`, `PCL`, `MCL`, `LCL`, `PatellarTendon`, `QuadricepsTendon`, `Fibula`) mirrored to right-knee laterality and non-rigidly registered onto the OpenMSK joint anatomy via compartment-anchored similarity + 3D Thin-Plate-Spline deformation.
+## Clean Multi-Mode Architecture
 
-## Features
-- **Synchronized 3D ↔ MRI Crosshair**: Selecting a 3D anatomical structure centers the sagittal/coronal/axial 3T MRI slice onto its exact RAS millimeter centroid; scrubbing MRI slices can also drive live 3D cross-section clipping (`MRI Cut` / `S` key).
-- **Real Quantitative Chondral Biomarkers**: Toggle `Thickness (mm)` (`T` key) to inspect per-vertex cartilage thickness (`0.0–3.8 mm`) on femoral, tibial, and patellar articular surfaces, or switch the MRI overlay to `OA Subregions`.
-- **Physiological & Pathological Knee Kinematics**: Interactive `0°–90°` flexion slider simulating Right-knee terminal screw-home rotation (`~11.5°`), patellar tracking, Lachman anterior drawer (`acl-rupture`, `unhappy-triad`), posterior tibial sag (`pcl-dashboard`), and medial radial meniscal extrusion (`posterior-root`).
-- **Clinical PACS Workflow**: Darkroom / Monograph workstation themes, instant PACS Window/Level presets (`Standard`, `Meniscus / ACL`, `Chondral`, `Trabecular`), unretouched clean grayscale film default with optional segmentation overlays (`O` key), and PowerScribe-ready structured dictation drawer (`R` key).
+- **Anatomy (`/anatomy`)**: Detailed collapsible 6-system anatomical tree (`16` segmented 3D structures + `17` sub-landmarks) that highlights and pins each structure in **3D** while jumping the **3T qDESS MRI** to its optimal diagnostic plane, vector callout, and toggleable MRI color segmentation map (`Off` / `16 Tissues` / `Subregions`).
+- **3D Full Screen (`/3d` or `Full 3D` button)**: Distraction-free, full-viewport 3D showcase with native fullscreen support (`Monitor Full`), collapsible preset selector (`Healthy Knee` + all `8` 3D pathologies), interactive motion sliders (`Knee Bend 0°–90°`, `Patella Slip 0%–100%`), and switchable `Patient`, `Clinical`, or `Pure 3D` (no text) caption modes.
+- **Pathologies (`/pathology`)**: Clean dual 3D + RAS-annotated MRI workstation covering all `8` high-yield pathologies (*Meniscal Tear Shapes*, *Bucket-Handle (Double PCL)*, *Posterior Root + Extrusion*, *ACL + Pivot-Shift*, *PCL Tear (Sag)*, *MCL & Unhappy Triad*, *Patella Dislocation & MPFL*, and *Chondral & OA Map*) with `1–2–3` focus steps and dismissible single-bar clinical notes.
+- **How to Report MRI (`/report-guide`)**: Dedicated, full-page scrollable structured reporting manual featuring a sticky 7-section table of contents, orthogonal plane matrix, schematic SVG diagrams, Normal vs. Pathology comparison cards, 1-click Copy dictation snippets, complete structured report template, and direct **`View in 3D + MRI`** deep links.
+- **Case Quiz (`/quiz`)**: 8 interactive pinpoint and board-style clinical vignette cases across the 3D knee and 3T MRI.
+
+## Data & Attribution
+
+- **Stanford OpenMSK**: In-vivo 3.0T qDESS MRI, chondral thickness maps, subregional labels, and BScore (`Goyal et al., Osteoarthritis and Cartilage Open, 2026`).
+- **NIH / Cleveland Clinic Open Knee(s)**: Soft-tissue ligament/tendon morphology (`R01GM104139`, CC-BY 4.0).
+
+## Local Development
+
+```bash
+npm ci
+npm run lint
+npm test
+npm run build
+node server.mjs
+```

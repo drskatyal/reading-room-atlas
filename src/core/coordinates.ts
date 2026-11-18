@@ -26,21 +26,22 @@ export function threeToRas(three: Vec3, jointCenterRas: Vec3, scale = 0.04): Vec
 }
 
 /**
- * Computes physiological screw-home kinematics and pathology-specific instability
+ * Computes physiological screw-home kinematics, pathology-specific instability
  * (Lachman anterior drawer in ACL tear, posterior sag in PCL tear, radial extrusion
- * in medial posterior root tear) calibrated for Right or Left laterality.
+ * in medial posterior root tear, lateral patellar subluxation in MPFL injury) calibrated
+ * for Right or Left laterality.
  */
 export function computeKneeKinematics(
   flexionDeg: number,
   chapterId: KneeChapterId,
   threeScale = 0.04,
-  laterality: 'Left' | 'Right' = 'Right'
+  laterality: 'Left' | 'Right' = 'Right',
+  patellaSubluxation = 0
 ): KneeKinematics {
   const clampedDeg = Math.max(0, Math.min(90, flexionDeg));
   const flexionRad = (clampedDeg * Math.PI) / 180;
 
   // Terminal extension locking ("screw-home"): ~11.5 deg tibial internal rotation during initial 0-25 deg flexion.
-  // Sign convention around +Y (Superior): Right-knee tibial internal rotation rotates anterior tibia (+Z) toward Medial (+X), which is +Y rotation.
   const baseScrewHome = 11.5 * (1 - Math.exp(-clampedDeg / 14)) + 0.03 * clampedDeg;
   const isAclDeficient = chapterId === 'acl-rupture' || chapterId === 'unhappy-triad';
   const isPclDeficient = chapterId === 'pcl-dashboard';
@@ -49,9 +50,6 @@ export function computeKneeKinematics(
   const screwHomeDeg = laterality === 'Right' ? screwHomeMag : -screwHomeMag;
 
   // Anterior-Posterior tibial translation (mm):
-  // - Normal knee: minimal physiological roll-back (~0.8 mm)
-  // - ACL-deficient: peaks around 20-30 deg flexion (Lachman position, ~7.6 mm anterior translation)
-  // - PCL-deficient: posterior sag peaks toward 70-90 deg flexion (posterior drawer, ~-8.2 mm)
   let anteriorDrawerMm = 0.8 * Math.sin(flexionRad);
   if (isAclDeficient) {
     const lachmanEnvelope = 0.55 + 0.45 * Math.exp(-Math.pow((clampedDeg - 26) / 24, 2));
@@ -61,7 +59,7 @@ export function computeKneeKinematics(
     anteriorDrawerMm = -8.2 * posteriorFactor;
   }
 
-  // Posterior meniscal translation with knee flexion (~3.8 mm total posterior glide at 90 deg)
+  // Posterior meniscal translation with knee flexion (~3.8 mm posterior glide at 90 deg)
   const meniscusPosteriorShiftZ = -(3.8 * Math.sin(flexionRad)) * threeScale;
 
   // Medial meniscal radial extrusion in posterior root tear (> 3 mm medially):
@@ -75,6 +73,12 @@ export function computeKneeKinematics(
   const patellaShiftZ = -(4.0 * (1 - Math.cos(flexionRad))) * threeScale;
   const patellaTiltRad = -flexionRad * 0.52;
 
+  // Lateral patellar subluxation/dislocation (MPFL tear): Right-knee Lateral is -X in Three.js (`+RAS X`)
+  const clampedSublux = Math.max(0, Math.min(1, patellaSubluxation));
+  const latSign = laterality === 'Right' ? -1 : 1;
+  const patellaLateralShiftX = latSign * clampedSublux * 14.5 * threeScale;
+  const patellaLateralTiltRad = latSign * clampedSublux * 0.34;
+
   return {
     flexionDeg: clampedDeg,
     flexionRad,
@@ -87,5 +91,7 @@ export function computeKneeKinematics(
     patellaDropY,
     patellaShiftZ,
     patellaTiltRad,
+    patellaLateralShiftX,
+    patellaLateralTiltRad,
   };
 }

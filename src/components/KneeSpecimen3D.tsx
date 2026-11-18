@@ -1,28 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import {
+  ChevronDown,
+  Eye,
+  Layers,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Plus,
+  RotateCcw,
+} from 'lucide-react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import {
-  BONE_NAMES,
   createAnatomyTextureBank,
   createStudioVignetteTexture,
   createTissueMaterial,
   syncSpecimenMaterialsAndVisibility,
 } from '../core/anatomyMaterials';
 import { rasToThree } from '../core/coordinates';
+import {
+  createPathologyOverlaySystem,
+  type PathologyOverlaySystem,
+} from '../core/pathologyMeshes';
 import { STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
-  KneeChapter,
+  CameraPresetKey,
   KneeKinematics,
   KneeLandmarks,
+  KneeModuleId,
+  MeniscalTearMorphology,
   MriPlaneMode,
+  SpecimenViewMode,
   StructureId,
   ThemeMode,
   TissueVisibility,
@@ -30,848 +46,1205 @@ import type {
 
 interface KneeSpecimen3DProps {
   landmarks: KneeLandmarks | null;
-  chapter: KneeChapter;
-  kinematics: KneeKinematics;
-  theme: ThemeMode;
-  activeStructure: StructureId;
-  onSelectStructure: (id: StructureId, centroidRas: [number, number, number]) => void;
+  moduleId: KneeModuleId;
+  subStepId: string;
+  meniscalTearMorphology?: MeniscalTearMorphology;
+  targetRasOverride?: [number, number, number];
+  targetBadge?: string;
+  viewMode: SpecimenViewMode;
+  onChangeViewMode: (mode: SpecimenViewMode) => void;
   visibility: TissueVisibility;
-  onToggleVisibility: (key: keyof TissueVisibility) => void;
-  mriPlaneMode: MriPlaneMode;
-  mriCrosshairRas: [number, number, number] | null;
+  onChangeVisibility: (next: TissueVisibility) => void;
+  cameraPreset: CameraPresetKey;
+  cameraDistanceScale?: number;
+  cameraTrigger: number;
+  onSelectCameraPreset: (preset: CameraPresetKey) => void;
+  activeStructure: StructureId;
+  onSelectStructure: (id: StructureId) => void;
+  flexionDeg: number;
+  kinematics: KneeKinematics;
+  showAllLabels: boolean;
+  onToggleAllLabels: () => void;
+  showSlicePlane: boolean;
+  onToggleSlicePlane: () => void;
+  mriSliceRas: [number, number, number];
+  mriPlane: MriPlaneMode;
+  theme: ThemeMode;
+  hideLabels?: boolean;
+  isFullScreenPage?: boolean;
+  onToggleFullScreenPage?: () => void;
+  onQuizStructureClick?: (id: StructureId) => void;
 }
 
-type CameraPresetKey = KneeChapter['cameraPreset'];
+const CAMERA_PRESETS: Record<
+  CameraPresetKey,
+  { label: string; pos: [number, number, number]; target: [number, number, number] }
+> = {
+  anterior: { label: 'Anterior', pos: [0.22, 0.55, 8.5], target: [0.0, 0.18, 0.15] },
+  medial: { label: 'Medial', pos: [8.1, 0.45, 1.85], target: [0.15, 0.15, 0.12] },
+  lateral: { label: 'Lateral', pos: [-8.1, 0.45, 1.65], target: [-0.15, 0.15, 0.08] },
+  posterior: { label: 'Posterior', pos: [-0.2, 0.65, -8.3], target: [0.0, 0.12, -0.05] },
+  notch: { label: 'Notch', pos: [0.16, -0.42, 6.75], target: [0.0, 0.16, 0.08] },
+  plateau: { label: 'Plateau Top', pos: [0.12, 7.65, 2.85], target: [0.1, -0.16, 0.06] },
+};
 
-// Right Knee Three.js camera presets (+X = Medial, -X = Lateral, +Y = Superior, +Z = Anterior)
-const CAMERA_PRESETS: Array<{
-  id: CameraPresetKey;
-  label: string;
-  position: [number, number, number];
-  target: [number, number, number];
-}> = [
-  { id: 'anterior', label: 'Anterior', position: [2.5, 0.35, 11.8], target: [0.0, 0.15, 0.05] },
-  { id: 'notch', label: 'Notch', position: [-0.35, 0.05, 6.0], target: [0.0, -0.02, 0.0] },
-  { id: 'medial', label: 'Medial', position: [8.8, 0.25, 2.8], target: [0.15, 0.1, 0.05] },
-  { id: 'lateral', label: 'Lateral', position: [-8.8, 0.25, 2.8], target: [-0.15, 0.1, 0.05] },
-  { id: 'plateau', label: 'Plateau', position: [0.0, 7.2, 2.8], target: [0.0, -0.1, 0.0] },
-  { id: 'posterior', label: 'Posterior', position: [-1.4, 0.35, -10.5], target: [0.0, 0.15, 0.0] },
-];
+function computeFramedCamera(
+  presetKey: CameraPresetKey,
+  distanceScale: number,
+  moduleId: KneeModuleId,
+  activeStructure: StructureId,
+  container: HTMLDivElement | null
+): { pos: THREE.Vector3; target: THREE.Vector3 } {
+  const preset = CAMERA_PRESETS[presetKey] ?? CAMERA_PRESETS.anterior;
+  const target = new THREE.Vector3(...preset.target);
+  const basePos = new THREE.Vector3(...preset.pos);
 
-const CALLOUT_STRUCTURES: StructureId[] = [
-  'ACL',
-  'PCL',
+  // When focusing patellar dislocation or extensor structures, elevate framing to patellofemoral zone
+  if (
+    moduleId === 'patellar-dislocation' ||
+    activeStructure === 'Patella' ||
+    activeStructure === 'PatellarCartilage' ||
+    activeStructure === 'QuadricepsTendon'
+  ) {
+    if (presetKey === 'medial') {
+      target.set(0.25, 1.08, 0.9);
+      basePos.set(7.6, 1.65, 2.6);
+    } else if (presetKey === 'lateral') {
+      target.set(-0.25, 1.08, 0.9);
+      basePos.set(-7.6, 1.65, 2.6);
+    } else {
+      target.set(-0.05, 1.05, 0.85);
+      basePos.set(0.25, 1.75, 8.2);
+    }
+  }
+
+  const cw = container?.clientWidth ?? 640;
+  const ch = container?.clientHeight ?? 640;
+  const aspect = Math.max(0.45, cw / Math.max(1, ch));
+  const safeScale = Math.max(0.96, distanceScale);
+  const aspectFactor = aspect < 1.0 ? Math.min(1.65, 1.04 / aspect) : 1.0;
+
+  const offset = basePos.sub(target).multiplyScalar(safeScale * aspectFactor);
+  return { pos: target.clone().add(offset), target };
+}
+
+const ALL_PIN_STRUCTURES: StructureId[] = [
+  'Femur',
+  'Tibia',
+  'Patella',
   'MedialMeniscus',
   'LateralMeniscus',
-  'FemoralCartilage',
+  'ACL',
+  'PCL',
   'MCL',
-  'LCL',
-  'PatellarTendon',
 ];
+
+const VIEW_MODES: Array<{ id: SpecimenViewMode; label: string }> = [
+  { id: 'solid', label: 'Solid' },
+  { id: 'joint-interior', label: 'Inside (X-Ray)' },
+  { id: 'plateau-topdown', label: 'Plateau' },
+  { id: 'cartilage-map', label: 'Cartilage' },
+];
+
+function isStructureId(val: string): val is StructureId {
+  return val in STRUCTURES_INFO;
+}
+
+function getEffectiveVisibility(
+  base: TissueVisibility,
+  viewMode: SpecimenViewMode,
+  moduleId: KneeModuleId
+) {
+  return {
+    bones: base.bones,
+    xrayBones: viewMode === 'joint-interior',
+    extensor:
+      viewMode === 'plateau-topdown' || viewMode === 'cartilage-map'
+        ? false
+        : viewMode === 'joint-interior'
+          ? moduleId === 'patellar-dislocation'
+          : base.extensor,
+    cartilage: viewMode === 'cartilage-map' ? true : base.cartilage,
+    thicknessMap: viewMode === 'cartilage-map',
+    menisci: base.menisci,
+    cruciates: base.cruciates,
+    collaterals: base.collaterals,
+    plateauDissection: viewMode === 'plateau-topdown',
+  };
+}
 
 export function KneeSpecimen3D({
   landmarks,
-  chapter,
-  kinematics,
-  theme,
+  moduleId,
+  subStepId,
+  meniscalTearMorphology,
+  targetRasOverride,
+  targetBadge,
+  viewMode,
+  onChangeViewMode,
+  visibility,
+  onChangeVisibility,
+  cameraPreset,
+  cameraDistanceScale = 1.0,
+  cameraTrigger,
+  onSelectCameraPreset,
   activeStructure,
   onSelectStructure,
-  visibility,
-  onToggleVisibility,
-  mriPlaneMode,
-  mriCrosshairRas,
+  flexionDeg,
+  kinematics,
+  showAllLabels,
+  onToggleAllLabels,
+  showSlicePlane,
+  onToggleSlicePlane,
+  mriSliceRas,
+  mriPlane,
+  theme,
+  hideLabels = false,
+  isFullScreenPage = false,
+  onToggleFullScreenPage,
+  onQuizStructureClick,
 }: KneeSpecimen3DProps) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const layersRef = useRef<HTMLDivElement | null>(null);
+  const [layersMenuOpen, setLayersMenuOpen] = useState(false);
 
-  const [loading, setLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [manualPreset, setManualPreset] = useState<{
-    chapterId: string;
-    preset: CameraPresetKey;
-  } | null>(null);
+  const [modelReady, setModelReady] = useState(false);
   const [hoveredStructure, setHoveredStructure] = useState<StructureId | null>(null);
+  const [stageSize, setStageSize] = useState({ w: 480, h: 480 });
 
-  const activePreset =
-    manualPreset?.chapterId === chapter.id ? manualPreset.preset : chapter.cameraPreset;
+  const [focusedPin, setFocusedPin] = useState<{ x: number; y: number; visible: boolean }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
+  const [allPins, setAllPins] = useState<
+    Record<string, { x: number; y: number; visible: boolean }>
+  >({});
+
+  // Latest props ref for rAF loop
+  const stateRef = useRef({
+    moduleId,
+    subStepId,
+    meniscalTearMorphology,
+    targetRasOverride,
+    viewMode,
+    visibility,
+    activeStructure,
+    hoveredStructure,
+    kinematics,
+    showAllLabels,
+    showSlicePlane,
+    mriSliceRas,
+    mriPlane,
+    hideLabels,
+    landmarks,
+  });
+  stateRef.current = {
+    moduleId,
+    subStepId,
+    meniscalTearMorphology,
+    targetRasOverride,
+    viewMode,
+    visibility,
+    activeStructure,
+    hoveredStructure,
+    kinematics,
+    showAllLabels,
+    showSlicePlane,
+    mriSliceRas,
+    mriPlane,
+    hideLabels,
+    landmarks,
+  };
+
+  const callbacksRef = useRef({ onSelectStructure, onQuizStructureClick });
+  callbacksRef.current = { onSelectStructure, onQuizStructureClick };
 
   const sceneRefs = useRef<{
-    scene?: THREE.Scene;
-    bgTexture?: THREE.CanvasTexture;
-    xrayUniform: { uXrayMode: { value: number } };
+    camera: THREE.PerspectiveCamera;
+    controls: OrbitControls;
+    renderer: THREE.WebGLRenderer;
+    composer: EffectComposer;
     meshes: Map<string, THREE.Mesh>;
     materials: Map<string, THREE.MeshPhysicalMaterial>;
-    tibiaPivot?: THREE.Group;
-    tibiaTranslational?: THREE.Group;
-    patellaGroup?: THREE.Group;
-    medMenGroup?: THREE.Group;
-    kissingContusions?: THREE.Group;
-    femBruise?: THREE.Mesh;
-    tibBruise?: THREE.Mesh;
-    rootTearMarker?: THREE.Mesh;
-    clipPlane: THREE.Plane;
-    camera?: THREE.PerspectiveCamera;
-    controls?: OrbitControls;
-    tween?: { active: boolean; destPos: THREE.Vector3; destTarget: THREE.Vector3 };
-  }>({
-    xrayUniform: { uXrayMode: { value: 0.0 } },
-    meshes: new Map(),
-    materials: new Map(),
-    clipPlane: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 10),
-  });
+    xrayUniform: { uXrayMode: { value: number } };
+    femurGroup: THREE.Group;
+    tibiaPivotGroup: THREE.Group;
+    tibiaTranslationGroup: THREE.Group;
+    tibiaScrewGroup: THREE.Group;
+    tibiaBodyGroup: THREE.Group;
+    medialMeniscusGroup: THREE.Group;
+    patellaGroup: THREE.Group;
+    focusedTargetAnchor: THREE.Object3D;
+    pathologySystem: PathologyOverlaySystem | null;
+    slicePlaneMesh: THREE.Mesh;
+    sliceOutline: THREE.LineLoop;
+    vignetteMat: THREE.MeshBasicMaterial;
+    animTargetPos: THREE.Vector3 | null;
+    animTargetLook: THREE.Vector3 | null;
+    tibiaPivotVec: THREE.Vector3;
+    tibiaPivotAxis: THREE.Vector3;
+    patellaCenterVec: THREE.Vector3;
+  } | null>(null);
 
-  const activeStructureRef = useRef(activeStructure);
-  const landmarksRef = useRef(landmarks);
-  const visibilityRef = useRef(visibility);
-  const themeRef = useRef(theme);
-  const onSelectRef = useRef(onSelectStructure);
-
+  // Close layers popover on outside click
   useEffect(() => {
-    activeStructureRef.current = activeStructure;
-    landmarksRef.current = landmarks;
-    visibilityRef.current = visibility;
-    themeRef.current = theme;
-    onSelectRef.current = onSelectStructure;
-  }, [activeStructure, landmarks, visibility, theme, onSelectStructure]);
+    if (!layersMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (layersRef.current && !layersRef.current.contains(e.target as Node)) {
+        setLayersMenuOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [layersMenuOpen]);
 
-  // Build WebGLRenderer(alpha: false) + Radial Vignette + Studio Lights + GTAO Composer + Load OpenMSK GLB
+  // Initialize Three.js Scene + Postprocessing + GLB Load
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let disposed = false;
+    const container = stageRef.current;
+    if (!container) return;
 
-    const w = Math.max(320, host.clientWidth);
-    const h = Math.max(240, host.clientHeight);
-
-    let renderer: THREE.WebGLRenderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: false,
-        powerPreference: 'high-performance',
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'WebGL initialization failed';
-      queueMicrotask(() => {
-        if (!disposed) {
-          setLoadError(msg);
-          setLoading(false);
-        }
-      });
-      return;
-    }
-
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(w, h);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.02;
-    renderer.localClippingEnabled = true;
-
-    host.innerHTML = '';
-    host.appendChild(renderer.domElement);
+    const width = Math.max(container.clientWidth, 320);
+    const height = Math.max(container.clientHeight, 320);
+    setStageSize({ w: width, h: height });
 
     const scene = new THREE.Scene();
-    const bgTex = createStudioVignetteTexture(themeRef.current);
-    scene.background = bgTex;
 
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 80);
+    camera.position.set(0.22, 0.55, 8.5);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      alpha: false,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height, false);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.className = 'specimen-canvas';
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.085;
+    controls.zoomToCursor = true;
+    controls.zoomSpeed = 1.3;
+    controls.panSpeed = 0.9;
+    controls.minDistance = 1.2;
+    controls.maxDistance = 18.0;
+    controls.target.set(0.0, 0.18, 0.15);
+    controls.update();
+
+    // Environment & Surgical Suite Studio Lighting
     const pmrem = new THREE.PMREMGenerator(renderer);
     const roomEnv = new RoomEnvironment();
     const envTarget = pmrem.fromScene(roomEnv, 0.04);
     scene.environment = envTarget.texture;
-    scene.environmentIntensity = 0.36;
     roomEnv.dispose();
     pmrem.dispose();
 
-    const textureBank = createAnatomyTextureBank();
+    const hemiLight = new THREE.HemisphereLight(0xf1f5f9, 0x1e293b, 0.55);
+    scene.add(hemiLight);
 
-    // Sculptural surgical three-point + subchondral bounce rig
-    const hemi = new THREE.HemisphereLight(0xdce8ff, 0x0c111b, 0.34);
-    const keyLight = new THREE.DirectionalLight(0xfff1dc, 1.65);
-    keyLight.position.set(4.8, 6.8, 5.5);
-    const rimLight = new THREE.DirectionalLight(0x88b6ff, 1.05);
-    rimLight.position.set(-5.2, 3.0, -4.5);
-    const bounceFill = new THREE.DirectionalLight(0xe2e8f0, 0.32);
-    bounceFill.position.set(0.0, -3.6, 4.4);
-    scene.add(hemi, keyLight, rimLight, bounceFill);
+    const keyLight = new THREE.DirectionalLight(0xfffaf0, 2.35);
+    keyLight.position.set(4.5, 6.2, 5.4);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.bias = -0.0005;
+    scene.add(keyLight);
 
-    const camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 80);
-    camera.position.set(2.5, 0.35, 11.8);
+    const fillLight = new THREE.DirectionalLight(0xbbe6ff, 0.95);
+    fillLight.position.set(-5.2, 2.0, 3.6);
+    scene.add(fillLight);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.075;
-    controls.minDistance = 2.0;
-    controls.maxDistance = 18;
-    controls.target.set(0.0, 0.15, 0.05);
-    controls.update();
+    const rimLight = new THREE.DirectionalLight(0xe0f2fe, 1.35);
+    rimLight.position.set(0.4, 3.8, -5.6);
+    scene.add(rimLight);
 
-    const composer = new EffectComposer(renderer);
-    composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    composer.setSize(w, h);
-    const renderPass = new RenderPass(scene, camera);
-    const gtaoPass = new GTAOPass(scene, camera, w, h);
-    gtaoPass.output = GTAOPass.OUTPUT.Default;
-    gtaoPass.blendIntensity = 0.65;
-    gtaoPass.updateGtaoMaterial({
-      radius: 0.24,
-      thickness: 1.0,
-      scale: 1.05,
-      samples: 16,
-    });
-    const outputPass = new OutputPass();
-    const smaaPass = new SMAAPass();
-    composer.addPass(renderPass);
-    composer.addPass(gtaoPass);
-    composer.addPass(outputPass);
-    composer.addPass(smaaPass);
-
-    const tween = {
-      active: false,
-      destPos: new THREE.Vector3(),
-      destTarget: new THREE.Vector3(),
-    };
-    const refsObj = sceneRefs.current;
-    refsObj.scene = scene;
-    refsObj.bgTexture = bgTex;
-    refsObj.camera = camera;
-    refsObj.controls = controls;
-    refsObj.tween = tween;
-
-    // Anatomical Right-Knee Kinematic Hierarchy
-    const root = new THREE.Group();
-    const femurAssembly = new THREE.Group();
-    const tibiaPivot = new THREE.Group();
-    const tibiaTranslational = new THREE.Group();
-    const patellaGroup = new THREE.Group();
-    const medMenGroup = new THREE.Group();
-
-    tibiaPivot.add(tibiaTranslational);
-    tibiaTranslational.add(medMenGroup);
-    root.add(femurAssembly, tibiaPivot, patellaGroup);
-    scene.add(root);
-
-    refsObj.tibiaPivot = tibiaPivot;
-    refsObj.tibiaTranslational = tibiaTranslational;
-    refsObj.patellaGroup = patellaGroup;
-    refsObj.medMenGroup = medMenGroup;
-
-    // Lateral compartment pivot-shift kissing bone contusions (Right knee: lateral is -X)
-    const kissingContusions = new THREE.Group();
-    const contusionMat = new THREE.MeshBasicMaterial({
-      color: 0xdc2626,
-      transparent: true,
-      opacity: 0.42,
+    // Subtle Studio Backdrop Sphere with vignette texture
+    const vignetteTex = createStudioVignetteTexture(theme);
+    const vignetteMat = new THREE.MeshBasicMaterial({
+      map: vignetteTex,
+      side: THREE.BackSide,
       depthWrite: false,
     });
-    const femBruise = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 16), contusionMat);
-    femBruise.position.set(-0.85, 0.22, 0.32);
-    const tibBruise = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 16), contusionMat);
-    tibBruise.position.set(-0.88, -0.32, -0.58);
-    kissingContusions.add(femBruise, tibBruise);
-    kissingContusions.visible = false;
-    root.add(kissingContusions);
-    refsObj.kissingContusions = kissingContusions;
-    refsObj.femBruise = femBruise;
-    refsObj.tibBruise = tibBruise;
+    const backdropDome = new THREE.Mesh(new THREE.SphereGeometry(28, 32, 24), vignetteMat);
+    scene.add(backdropDome);
 
-    // Medial posterior root tear ring marker
-    const rootTearMarker = new THREE.Mesh(
-      new THREE.TorusGeometry(0.13, 0.028, 12, 28),
-      new THREE.MeshBasicMaterial({ color: 0xef4444 })
-    );
-    rootTearMarker.rotation.x = Math.PI / 2;
-    rootTearMarker.position.set(0.35, -0.22, -0.45);
-    rootTearMarker.visible = false;
-    tibiaTranslational.add(rootTearMarker);
-    refsObj.rootTearMarker = rootTearMarker;
+    // Kinematic Scene Hierarchy
+    const specimenRoot = new THREE.Group();
+    scene.add(specimenRoot);
 
+    const femurGroup = new THREE.Group();
+    const tibiaPivotGroup = new THREE.Group();
+    const tibiaTranslationGroup = new THREE.Group();
+    const tibiaScrewGroup = new THREE.Group();
+    const tibiaBodyGroup = new THREE.Group();
+    const medialMeniscusGroup = new THREE.Group();
+    const patellaGroup = new THREE.Group();
+
+    specimenRoot.add(femurGroup);
+    specimenRoot.add(tibiaPivotGroup);
+    tibiaPivotGroup.add(tibiaTranslationGroup);
+    tibiaTranslationGroup.add(tibiaScrewGroup);
+    tibiaScrewGroup.add(tibiaBodyGroup);
+    tibiaBodyGroup.add(medialMeniscusGroup);
+    specimenRoot.add(patellaGroup);
+
+    const focusedTargetAnchor = new THREE.Object3D();
+    femurGroup.add(focusedTargetAnchor);
+
+    // Subtle MRI Slice Reference Frame in 3D
+    const slicePlaneGeo = new THREE.PlaneGeometry(4.2, 4.2);
+    const slicePlaneMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const slicePlaneMesh = new THREE.Mesh(slicePlaneGeo, slicePlaneMat);
+    slicePlaneMesh.visible = false;
+    scene.add(slicePlaneMesh);
+
+    const outlinePts = [
+      new THREE.Vector3(-2.1, -2.1, 0),
+      new THREE.Vector3(2.1, -2.1, 0),
+      new THREE.Vector3(2.1, 2.1, 0),
+      new THREE.Vector3(-2.1, 2.1, 0),
+    ];
+    const sliceOutlineGeo = new THREE.BufferGeometry().setFromPoints(outlinePts);
+    const sliceOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x7dd3fc,
+      transparent: true,
+      opacity: 0.72,
+    });
+    const sliceOutline = new THREE.LineLoop(sliceOutlineGeo, sliceOutlineMat);
+    slicePlaneMesh.add(sliceOutline);
+
+    // Effect Composer: Render -> GTAO -> Output -> SMAA
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const gtaoPass = new GTAOPass(scene, camera, width, height);
+    gtaoPass.output = GTAOPass.OUTPUT.Default;
+    gtaoPass.updateGtaoMaterial({ radius: 0.24, distanceExponent: 1.8, thickness: 1.0, scale: 1.0, samples: 12 });
+    composer.addPass(gtaoPass);
+
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+
+    const smaaPass = new SMAAPass();
+    composer.addPass(smaaPass);
+
+    // Load 3T In-Vivo Specimen GLB
+    const textureBank = createAnatomyTextureBank();
+    const xrayUniform = { uXrayMode: { value: 0.0 } };
+    const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
+    const meshes = new Map<string, THREE.Mesh>();
+    const materials = new Map<string, THREE.MeshPhysicalMaterial>();
+
+    const refs = {
+      camera,
+      controls,
+      renderer,
+      composer,
+      meshes,
+      materials,
+      xrayUniform,
+      femurGroup,
+      tibiaPivotGroup,
+      tibiaTranslationGroup,
+      tibiaScrewGroup,
+      tibiaBodyGroup,
+      medialMeniscusGroup,
+      patellaGroup,
+      focusedTargetAnchor,
+      pathologySystem: null as PathologyOverlaySystem | null,
+      slicePlaneMesh,
+      sliceOutline,
+      vignetteMat,
+      animTargetPos: null as THREE.Vector3 | null,
+      animTargetLook: null as THREE.Vector3 | null,
+      tibiaPivotVec: new THREE.Vector3(0, 0.2, 0.1),
+      tibiaPivotAxis: new THREE.Vector3(1, 0, 0),
+      patellaCenterVec: new THREE.Vector3(-0.44, 1.47, 1.97),
+    };
+    sceneRefs.current = refs;
+
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
     const loader = new GLTFLoader();
-    const tmpColor = new THREE.Color();
+    loader.setDRACOLoader(draco);
 
+    let disposed = false;
     loader.load(
       '/models/knee-invivo-3t.glb',
       (gltf) => {
         if (disposed) return;
 
-        const lm = landmarksRef.current;
-        if (lm) {
-          tibiaPivot.position.set(...lm.transepicondylarPivot);
-          tibiaTranslational.position.set(
-            -lm.transepicondylarPivot[0],
-            -lm.transepicondylarPivot[1],
-            -lm.transepicondylarPivot[2]
-          );
-        }
+        const lm = stateRef.current.landmarks;
+        const pivotArr = lm?.transepicondylarPivot ?? [0.06, 0.28, 0.1];
+        const axisArr = lm?.transepicondylarAxis ?? [1, 0, 0];
+        refs.tibiaPivotVec.set(pivotArr[0], pivotArr[1], pivotArr[2]);
+        refs.tibiaPivotAxis.set(axisArr[0], axisArr[1], axisArr[2]).normalize();
+        // Ensure positive flexion always rotates distal tibia (-Y) posteriorly (-Z)
+        if (refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
 
-        const loadedMeshes: Array<{ name: string; mesh: THREE.Mesh }> = [];
+        tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
+        tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
+
+        const collected: Array<{ name: string; mesh: THREE.Mesh }> = [];
         gltf.scene.traverse((obj) => {
           if (obj instanceof THREE.Mesh) {
-            const name = obj.name || obj.parent?.name || '';
-            if (name) loadedMeshes.push({ name, mesh: obj });
+            obj.geometry.computeVertexNormals();
+            collected.push({ name: obj.name, mesh: obj });
           }
         });
 
-        for (const { name, mesh } of loadedMeshes) {
-          // Convert OpenMSK per-vertex quantitative cartilage thickness (_thickness_rgb uint8 0..255) into linear BufferAttribute 'color'
-          const thickAttr = mesh.geometry.getAttribute('_thickness_rgb');
-          if (thickAttr && thickAttr.array) {
-            const count = thickAttr.count;
-            const colors = new Float32Array(count * 3);
-            const src = thickAttr.array;
-            for (let i = 0; i < count; i++) {
-              tmpColor.setRGB(
-                src[i * 4] / 255.0,
-                src[i * 4 + 1] / 255.0,
-                src[i * 4 + 2] / 255.0,
-                THREE.SRGBColorSpace
-              );
-              colors[i * 3] = tmpColor.r;
-              colors[i * 3 + 1] = tmpColor.g;
-              colors[i * 3 + 2] = tmpColor.b;
-            }
-            mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-          }
-
-          mesh.geometry.computeVertexNormals();
-          mesh.userData = { structureId: name };
-
-          const mat = createTissueMaterial(name, refsObj.clipPlane, textureBank, refsObj.xrayUniform);
+        for (const { name, mesh } of collected) {
+          const mat = createTissueMaterial(name, clipPlane, textureBank, xrayUniform);
           mesh.material = mat;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.userData.structureName = name;
 
-          refsObj.meshes.set(name, mesh);
-          refsObj.materials.set(name, mat);
+          meshes.set(name, mesh);
+          materials.set(name, mat);
 
-          if (
-            name === 'Femur' ||
-            name === 'FemoralCartilage' ||
-            name === 'QuadricepsTendon' ||
-            name === 'ACL' ||
-            name === 'PCL' ||
+          if (name === 'Femur' || name === 'FemoralCartilage') {
+            femurGroup.add(mesh);
+          } else if (
+            name === 'Patella' ||
+            name === 'PatellarCartilage' ||
+            name === 'PatellarTendon' ||
+            name === 'QuadricepsTendon'
+          ) {
+            patellaGroup.add(mesh);
+          } else if (
+            name === 'MedialMeniscus' ||
+            name === 'MedialMeniscusTruncated' ||
             name === 'BucketHandleFragment'
           ) {
-            femurAssembly.add(mesh);
-          } else if (name === 'Patella' || name === 'PatellarCartilage') {
-            patellaGroup.add(mesh);
-          } else if (name === 'MedialMeniscus' || name === 'MedialMeniscusTruncated') {
-            medMenGroup.add(mesh);
+            if (name === 'BucketHandleFragment') {
+              // Anchor displaced bucket-handle inside notch alongside PCL
+              tibiaBodyGroup.add(mesh);
+            } else {
+              medialMeniscusGroup.add(mesh);
+            }
           } else {
-            tibiaTranslational.add(mesh);
+            tibiaBodyGroup.add(mesh);
           }
         }
 
-        setLoading(false);
+        const patMesh = meshes.get('Patella');
+        if (patMesh) {
+          patMesh.geometry.computeBoundingBox();
+          const pBox = patMesh.geometry.boundingBox;
+          if (pBox) pBox.getCenter(refs.patellaCenterVec);
+        }
+
+        refs.pathologySystem = createPathologyOverlaySystem({
+          femurGroup,
+          tibiaBodyGroup,
+          medialMeniscusGroup,
+          patellaGroup,
+          meshes,
+          threeScale: lm?.threeScale ?? 0.04,
+          laterality: lm?.laterality ?? 'Right',
+        });
+
+        setModelReady(true);
+        setLoadProgress(100);
       },
-      undefined,
-      (err) => {
+      (evt) => {
+        if (evt.total > 0) {
+          setLoadProgress(Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
+        }
+      },
+      () => {
         if (!disposed) {
-          setLoadError(err instanceof Error ? err.message : 'Failed to load 3D In-Vivo Knee GLB');
-          setLoading(false);
+          setLoadError('Unable to load /models/knee-invivo-3t.glb specimen meshes.');
         }
       }
     );
 
+    // Hover & Click / Double-click raycasting
     const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-    let downPt = { x: 0, y: 0 };
+    const pointerNdc = new THREE.Vector2();
+    let pointerDownPos: { x: number; y: number } | null = null;
 
-    const pickStructure = (clientX: number, clientY: number): StructureId | null => {
+    const pickStructureAt = (clientX: number, clientY: number): { id: StructureId; point: THREE.Vector3 } | null => {
       const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
-
-      const candidateMeshes: THREE.Mesh[] = [];
-      for (const [name, m] of refsObj.meshes) {
-        if (m.visible && name in STRUCTURES_INFO) {
-          candidateMeshes.push(m);
-        }
-      }
-      const hits = raycaster.intersectObjects(candidateMeshes, false);
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointerNdc, camera);
+      const visibleTargets = Array.from(meshes.values()).filter((m) => m.visible);
+      const hits = raycaster.intersectObjects(visibleTargets, false);
       for (const hit of hits) {
-        const sid = hit.object.userData?.structureId as StructureId | undefined;
-        if (sid && sid in STRUCTURES_INFO) {
-          if (visibilityRef.current.xrayBones && BONE_NAMES.has(sid)) {
-            const softHit = hits.find(
-              (h) =>
-                h.object.userData?.structureId &&
-                !BONE_NAMES.has(h.object.userData.structureId as string)
-            );
-            if (softHit) {
-              return softHit.object.userData.structureId as StructureId;
-            }
-          }
-          return sid;
+        const raw = hit.object.userData.structureName as string;
+        const mapped =
+          raw === 'BucketHandleFragment' || raw === 'MedialMeniscusTruncated'
+            ? 'MedialMeniscus'
+            : raw;
+        if (isStructureId(mapped)) {
+          return { id: mapped, point: hit.point };
         }
       }
       return null;
     };
 
-    const onPointerDown = (e: PointerEvent) => {
-      downPt = { x: e.clientX, y: e.clientY };
-    };
-
     const onPointerMove = (e: PointerEvent) => {
-      const hit = pickStructure(e.clientX, e.clientY);
-      setHoveredStructure(hit);
+      const hit = pickStructureAt(e.clientX, e.clientY);
+      setHoveredStructure(hit ? hit.id : null);
       renderer.domElement.style.cursor = hit ? 'pointer' : 'grab';
     };
 
+    const onPointerDown = (e: PointerEvent) => {
+      // Cancel scripted fly-to animation as soon as the user grabs the canvas
+      refs.animTargetPos = null;
+      refs.animTargetLook = null;
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+    };
+
     const onPointerUp = (e: PointerEvent) => {
-      if (Math.hypot(e.clientX - downPt.x, e.clientY - downPt.y) > 6) return;
-      const hit = pickStructure(e.clientX, e.clientY);
+      if (!pointerDownPos) return;
+      const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      pointerDownPos = null;
+      if (dist > 5) return;
+
+      const hit = pickStructureAt(e.clientX, e.clientY);
       if (hit) {
-        const lm = landmarksRef.current?.structures[hit];
-        onSelectRef.current(hit, lm ? lm.centroidRas : [112, 21, -12]);
+        if (callbacksRef.current.onQuizStructureClick && stateRef.current.hideLabels) {
+          callbacksRef.current.onQuizStructureClick(hit.id);
+        } else {
+          callbacksRef.current.onSelectStructure(hit.id);
+        }
       }
     };
 
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    const onDoubleClick = (e: MouseEvent) => {
+      const hit = pickStructureAt(e.clientX, e.clientY);
+      if (hit) {
+        const dir = camera.position.clone().sub(controls.target).normalize();
+        const curDist = camera.position.distanceTo(controls.target);
+        const nextDist = Math.max(1.8, Math.min(curDist * 0.72, 3.6));
+        refs.animTargetLook = hit.point.clone();
+        refs.animTargetPos = hit.point.clone().addScaledVector(dir, nextDist);
+        callbacksRef.current.onSelectStructure(hit.id);
+      } else {
+        const preset = CAMERA_PRESETS.anterior;
+        refs.animTargetPos = new THREE.Vector3(...preset.pos);
+        refs.animTargetLook = new THREE.Vector3(...preset.target);
+      }
+    };
 
-    let curW = w;
-    let curH = h;
-    const syncViewportSize = (nw: number, nh: number) => {
-      if (nw <= 0 || nh <= 0 || (nw === curW && nh === curH)) return;
-      curW = nw;
-      curH = nh;
-      camera.aspect = nw / nh;
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('dblclick', onDoubleClick);
+
+    const tmpWorldPos = new THREE.Vector3();
+    const tmpProj = new THREE.Vector3();
+    const tmpBox = new THREE.Box3();
+    const tmpCenter = new THREE.Vector3();
+
+    const projectCalloutPins = () => {
+      const s = stateRef.current;
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      if (cw > 0 && ch > 0 && !s.hideLabels && refs.meshes.size > 0) {
+        const focusStruct = s.activeStructure;
+        let anchorParent: THREE.Group = femurGroup;
+        if (focusStruct === 'Patella' || focusStruct === 'PatellarCartilage' || focusStruct === 'PatellarTendon' || focusStruct === 'QuadricepsTendon') {
+          anchorParent = patellaGroup;
+        } else if (focusStruct === 'MedialMeniscus') {
+          anchorParent = medialMeniscusGroup;
+        } else if (
+          focusStruct === 'Tibia' ||
+          focusStruct === 'Fibula' ||
+          focusStruct === 'LateralMeniscus' ||
+          focusStruct === 'MedialTibialCartilage' ||
+          focusStruct === 'LateralTibialCartilage' ||
+          focusStruct === 'ACL' ||
+          focusStruct === 'PCL' ||
+          focusStruct === 'MCL' ||
+          focusStruct === 'LCL'
+        ) {
+          anchorParent = tibiaBodyGroup;
+        }
+
+        if (focusedTargetAnchor.parent !== anchorParent) {
+          anchorParent.add(focusedTargetAnchor);
+        }
+
+        if (s.targetRasOverride && s.landmarks) {
+          const tLocal = rasToThree(
+            s.targetRasOverride,
+            s.landmarks.jointCenterRas,
+            s.landmarks.threeScale
+          );
+          focusedTargetAnchor.position.set(tLocal[0], tLocal[1], tLocal[2]);
+        } else {
+          const targetMesh =
+            s.moduleId === 'bucket-handle' && focusStruct === 'MedialMeniscus'
+              ? refs.meshes.get('BucketHandleFragment') ?? refs.meshes.get('MedialMeniscus')
+              : refs.meshes.get(focusStruct);
+          if (targetMesh) {
+            targetMesh.geometry.computeBoundingBox();
+            if (targetMesh.geometry.boundingBox) {
+              targetMesh.geometry.boundingBox.getCenter(tmpCenter);
+              if (focusStruct === 'ACL') {
+                tmpCenter.y -= 0.14;
+              }
+              focusedTargetAnchor.position.copy(tmpCenter);
+            }
+          }
+        }
+
+        focusedTargetAnchor.getWorldPosition(tmpWorldPos);
+        tmpProj.copy(tmpWorldPos).project(camera);
+        const px = (tmpProj.x * 0.5 + 0.5) * cw;
+        const py = (-tmpProj.y * 0.5 + 0.5) * ch;
+        const onScreen = tmpProj.z >= -1 && tmpProj.z <= 1 && px > 12 && px < cw - 12 && py > 54 && py < ch - 52;
+        setFocusedPin((prev) => {
+          if (
+            prev.visible === onScreen &&
+            Math.abs(prev.x - px) < 0.7 &&
+            Math.abs(prev.y - py) < 0.7
+          ) {
+            return prev;
+          }
+          return { x: px, y: py, visible: onScreen };
+        });
+
+        if (s.showAllLabels) {
+          const nextAll: Record<string, { x: number; y: number; visible: boolean }> = {};
+          for (const sid of ALL_PIN_STRUCTURES) {
+            const m = refs.meshes.get(sid);
+            if (!m || !m.visible) {
+              nextAll[sid] = { x: 0, y: 0, visible: false };
+              continue;
+            }
+            tmpBox.setFromObject(m);
+            tmpBox.getCenter(tmpWorldPos);
+            tmpProj.copy(tmpWorldPos).project(camera);
+            const sx = (tmpProj.x * 0.5 + 0.5) * cw;
+            const sy = (-tmpProj.y * 0.5 + 0.5) * ch;
+            const vis = tmpProj.z >= -1 && tmpProj.z <= 1 && sx > 20 && sx < cw - 20 && sy > 58 && sy < ch - 56;
+            nextAll[sid] = { x: sx, y: sy, visible: vis };
+          }
+          setAllPins(nextAll);
+        }
+      } else {
+        setFocusedPin((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      }
+    };
+
+    // ResizeObserver with synchronous re-render so frames never drop during resize
+    const syncViewportSize = () => {
+      const w = Math.max(container.clientWidth, 100);
+      const h = Math.max(container.clientHeight, 100);
+      setStageSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
-      composer.setSize(nw, nh);
+      renderer.setSize(w, h, false);
+      composer.setSize(w, h);
+      gtaoPass.setSize(w, h);
       controls.update();
       composer.render();
+      projectCalloutPins();
     };
+    const ro = new ResizeObserver(syncViewportSize);
+    ro.observe(container);
 
-    const ro = new ResizeObserver(() => {
-      if (!host) return;
-      syncViewportSize(host.clientWidth, host.clientHeight);
-    });
-    ro.observe(host);
+    // Animation Loop
+    const clock = new THREE.Clock();
+    let frameHandle = 0;
 
-    const tmpVec = new THREE.Vector3();
-    const tmpBox = new THREE.Box3();
-    let rafId = 0;
+    const animate = () => {
+      if (disposed) return;
+      frameHandle = window.requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.5);
+      const elapsedSec = clock.elapsedTime;
+      const s = stateRef.current;
 
-    const projectCallouts = () => {
-      const svg = svgRef.current;
-      const stageW = host.clientWidth;
-      const stageH = host.clientHeight;
-      if (!svg || stageW < 100 || stageH < 100) return;
-
-      const showCallouts = visibilityRef.current.callouts;
-      svg.style.display = showCallouts ? 'block' : 'none';
-      if (!showCallouts) {
-        for (const sid of CALLOUT_STRUCTURES) {
-          const pill = pillRefs.current[sid];
-          if (pill) pill.style.opacity = '0';
+      // 1. Update smooth frame-rate-independent camera fly-to animation
+      if (refs.animTargetPos && refs.animTargetLook) {
+        const alpha = dt >= 0.16 ? 1.0 : Math.min(1, 1 - Math.exp(-12 * dt));
+        camera.position.lerp(refs.animTargetPos, alpha);
+        controls.target.lerp(refs.animTargetLook, alpha);
+        if (
+          camera.position.distanceTo(refs.animTargetPos) < 0.035 &&
+          controls.target.distanceTo(refs.animTargetLook) < 0.035
+        ) {
+          camera.position.copy(refs.animTargetPos);
+          controls.target.copy(refs.animTargetLook);
+          refs.animTargetPos = null;
+          refs.animTargetLook = null;
         }
-        return;
       }
 
-      const items: Array<{
-        id: StructureId;
-        x: number;
-        y: number;
-        side: 'left' | 'right';
-        pillY: number;
-      }> = [];
+      controls.update();
 
-      const topSafe = 54;
-      const botSafe = Math.max(topSafe + 40, stageH - 148);
+      // 2. Apply Knee Biomechanics + Pathology Dislocation
+      const kin = s.kinematics;
+      tibiaPivotGroup.quaternion.setFromAxisAngle(refs.tibiaPivotAxis, kin.flexionRad);
+      tibiaTranslationGroup.position.set(0, 0, kin.anteriorTranslationThree);
+      tibiaScrewGroup.rotation.set(0, THREE.MathUtils.degToRad(kin.screwHomeDeg), 0);
 
-      for (const sid of CALLOUT_STRUCTURES) {
-        const mesh = refsObj.meshes.get(sid);
-        const pill = pillRefs.current[sid];
-        if (!mesh || !mesh.visible || !pill) {
-          if (pill) pill.style.opacity = '0';
-          continue;
-        }
-        tmpBox.setFromObject(mesh).getCenter(tmpVec);
-        tmpVec.project(camera);
-        if (tmpVec.z > 1) {
-          pill.style.opacity = '0';
-          continue;
-        }
-        const sx = (tmpVec.x * 0.5 + 0.5) * stageW;
-        const sy = (-tmpVec.y * 0.5 + 0.5) * stageH;
-        items.push({
-          id: sid,
-          x: sx,
-          y: sy,
-          side: sx < stageW * 0.5 ? 'left' : 'right',
-          pillY: Math.max(topSafe, Math.min(botSafe, sy)),
+      medialMeniscusGroup.position.set(
+        kin.medialMeniscusShiftX,
+        0,
+        kin.meniscusPosteriorShiftZ
+      );
+
+      // Lateral patellar subluxation tilts patella around longitudinal Y axis & shifts laterally (-X Right)
+      const c = refs.patellaCenterVec;
+      const tiltQuat = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(kin.patellaTiltRad * 0.85, kin.patellaLateralTiltRad, 0, 'YXZ')
+      );
+      const offsetFromCenter = tmpCenter.copy(c).applyQuaternion(tiltQuat).sub(c);
+      patellaGroup.quaternion.copy(tiltQuat);
+      patellaGroup.position.set(
+        kin.patellaLateralShiftX - offsetFromCenter.x,
+        kin.patellaDropY - offsetFromCenter.y,
+        kin.patellaShiftZ - offsetFromCenter.z
+      );
+
+      // 3. Update Materials & Pathology Overlays
+      const effVis = getEffectiveVisibility(s.visibility, s.viewMode, s.moduleId);
+      syncSpecimenMaterialsAndVisibility({
+        meshes: refs.meshes,
+        materials: refs.materials,
+        xrayUniform: refs.xrayUniform,
+        visibility: effVis,
+        chapterId: s.moduleId,
+        activeStructure: s.activeStructure,
+        hoveredStructure: s.hoveredStructure,
+      });
+
+      if (refs.pathologySystem) {
+        refs.pathologySystem.update({
+          moduleId: s.moduleId,
+          subStepId: s.subStepId,
+          meniscalTearMorphology: s.meniscalTearMorphology,
+          kinematics: kin,
+          visibility: s.visibility,
+          elapsedSec,
         });
       }
 
-      for (const side of ['left', 'right'] as const) {
-        const group = items.filter((it) => it.side === side).sort((a, b) => a.pillY - b.pillY);
-        const minGap = 28;
-        for (let i = 1; i < group.length; i++) {
-          if (group[i].pillY - group[i - 1].pillY < minGap) {
-            group[i].pillY = group[i - 1].pillY + minGap;
-          }
+      // 4. Update MRI Slice Reference Frame in 3D
+      if (s.showSlicePlane && s.landmarks) {
+        slicePlaneMesh.visible = true;
+        const threeSlice = rasToThree(
+          s.mriSliceRas,
+          s.landmarks.jointCenterRas,
+          s.landmarks.threeScale
+        );
+        if (s.mriPlane === 'sagittal') {
+          slicePlaneMesh.position.set(threeSlice[0], 0.1, 0.15);
+          slicePlaneMesh.rotation.set(0, Math.PI * 0.5, 0);
+        } else if (s.mriPlane === 'coronal') {
+          slicePlaneMesh.position.set(0, 0.1, threeSlice[2]);
+          slicePlaneMesh.rotation.set(0, 0, 0);
+        } else {
+          slicePlaneMesh.position.set(0, threeSlice[1], 0.15);
+          slicePlaneMesh.rotation.set(Math.PI * 0.5, 0, 0);
         }
-        for (let i = group.length - 2; i >= 0; i--) {
-          if (group[i].pillY > botSafe) {
-            group[i].pillY = botSafe;
-          }
-          if (group[i + 1].pillY - group[i].pillY < minGap) {
-            group[i].pillY = Math.max(topSafe, group[i + 1].pillY - minGap);
-          }
-        }
+      } else {
+        slicePlaneMesh.visible = false;
       }
 
-      while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-      for (const item of items) {
-        const pill = pillRefs.current[item.id];
-        if (!pill) continue;
-        pill.style.opacity = '1';
-        const pillW = pill.offsetWidth || 88;
-        const marginX = item.side === 'left' ? 14 : stageW - pillW - 14;
-        pill.style.transform = `translate(${marginX.toFixed(1)}px, ${(item.pillY - 12).toFixed(1)}px)`;
-
-        const anchorX = item.side === 'left' ? marginX + pillW + 4 : marginX - 4;
-        const anchorY = item.pillY;
-        const isSelected = activeStructureRef.current === item.id;
-
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', anchorX.toFixed(1));
-        line.setAttribute('y1', anchorY.toFixed(1));
-        line.setAttribute('x2', item.x.toFixed(1));
-        line.setAttribute('y2', item.y.toFixed(1));
-        line.setAttribute('class', `callout-line ${isSelected ? 'active' : ''}`);
-        svg.appendChild(line);
-
-        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        dot.setAttribute('cx', item.x.toFixed(1));
-        dot.setAttribute('cy', item.y.toFixed(1));
-        dot.setAttribute('r', isSelected ? '3.5' : '2.4');
-        dot.setAttribute('class', `callout-dot ${isSelected ? 'active' : ''}`);
-        svg.appendChild(dot);
-      }
-    };
-
-    const animate = () => {
-      rafId = requestAnimationFrame(animate);
-      if (tween.active) {
-        camera.position.lerp(tween.destPos, 0.14);
-        controls.target.lerp(tween.destTarget, 0.14);
-        if (
-          camera.position.distanceTo(tween.destPos) < 0.03 &&
-          controls.target.distanceTo(tween.destTarget) < 0.02
-        ) {
-          camera.position.copy(tween.destPos);
-          controls.target.copy(tween.destTarget);
-          tween.active = false;
-        }
-      }
-      controls.update();
+      // 5. Render Scene
       composer.render();
-      projectCallouts();
+
+      // 6. Project Active Target Callout Pin & Optional All-Pins Overlay
+      projectCalloutPins();
     };
-    animate();
+
+    frameHandle = window.requestAnimationFrame(animate);
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(rafId);
+      window.cancelAnimationFrame(frameHandle);
       ro.disconnect();
-      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('dblclick', onDoubleClick);
+
+      refs.pathologySystem?.dispose();
+      for (const m of materials.values()) m.dispose();
+      slicePlaneGeo.dispose();
+      slicePlaneMat.dispose();
+      sliceOutlineGeo.dispose();
+      sliceOutlineMat.dispose();
+      backdropDome.geometry.dispose();
+      vignetteMat.dispose();
+      vignetteTex.dispose();
+      textureBank.dispose();
+      envTarget.dispose();
       controls.dispose();
       composer.dispose();
-      textureBank.dispose();
-      refsObj.bgTexture?.dispose();
-      envTarget.dispose();
       renderer.dispose();
+      if (renderer.domElement.parentNode === container) {
+        container.removeChild(renderer.domElement);
+      }
+      sceneRefs.current = null;
     };
   }, []);
 
-  // Update studio backdrop texture when switching Darkroom <-> Monograph
+  // Theme update on vignette dome
   useEffect(() => {
-    const r = sceneRefs.current;
-    if (!r.scene) return;
-    const nextBg = createStudioVignetteTexture(theme);
-    r.scene.background = nextBg;
-    r.bgTexture?.dispose();
-    r.bgTexture = nextBg;
+    const refs = sceneRefs.current;
+    if (!refs) return;
+    const oldTex = refs.vignetteMat.map;
+    refs.vignetteMat.map = createStudioVignetteTexture(theme);
+    refs.vignetteMat.needsUpdate = true;
+    oldTex?.dispose();
   }, [theme]);
 
-  // Align tibia pivot & dynamic pathology markers when landmarks finish loading
+  // Keep tibial flexion pivot synced even if landmarks finish fetching after GLB load
   useEffect(() => {
-    const r = sceneRefs.current;
-    if (!landmarks || !r.tibiaPivot || !r.tibiaTranslational) return;
-    r.tibiaPivot.position.set(...landmarks.transepicondylarPivot);
-    r.tibiaTranslational.position.set(
-      -landmarks.transepicondylarPivot[0],
-      -landmarks.transepicondylarPivot[1],
-      -landmarks.transepicondylarPivot[2]
-    );
+    const refs = sceneRefs.current;
+    if (!refs || !modelReady || !landmarks) return;
+    const pivotArr = landmarks.transepicondylarPivot ?? [0.06, 0.28, 0.1];
+    const axisArr = landmarks.transepicondylarAxis ?? [1, 0, 0];
+    refs.tibiaPivotVec.set(pivotArr[0], pivotArr[1], pivotArr[2]);
+    refs.tibiaPivotAxis.set(axisArr[0], axisArr[1], axisArr[2]).normalize();
+    if (refs.tibiaPivotAxis.x < 0) refs.tibiaPivotAxis.negate();
+    refs.tibiaPivotGroup.position.copy(refs.tibiaPivotVec);
+    refs.tibiaBodyGroup.position.copy(refs.tibiaPivotVec).negate();
+  }, [landmarks, modelReady]);
 
-    const latTib = landmarks.structures.LateralTibialCartilage?.centroidThree;
-    if (latTib && r.femBruise && r.tibBruise) {
-      r.femBruise.position.set(latTib[0] * 0.92, latTib[1] + 0.34, latTib[2] + 0.36);
-      r.tibBruise.position.set(latTib[0] * 0.96, latTib[1] - 0.14, latTib[2] - 0.44);
-    }
-    const medMen = landmarks.structures.MedialMeniscus?.centroidThree;
-    const pcl = landmarks.structures.PCL?.centroidThree;
-    if (medMen && pcl && r.rootTearMarker) {
-      r.rootTearMarker.position.set(medMen[0] * 0.45, medMen[1] + 0.05, pcl[2] - 0.06);
-    }
-  }, [landmarks]);
-
-  // Apply chapter preset camera when chapter changes
+  // Fly camera when preset, focus, or cameraTrigger changes
   useEffect(() => {
-    const preset = CAMERA_PRESETS.find((p) => p.id === chapter.cameraPreset);
-    const tween = sceneRefs.current.tween;
-    if (preset && tween) {
-      tween.destPos.set(...preset.position);
-      tween.destTarget.set(...preset.target);
-      tween.active = true;
-    }
-  }, [chapter]);
-
-  // Sync Right-knee kinematics, pathology states, Fresnel X-ray, thickness map, highlight & clip plane
-  useEffect(() => {
-    const r = sceneRefs.current;
-
-    if (r.tibiaPivot && landmarks) {
-      const axis = new THREE.Vector3(...landmarks.transepicondylarAxis).normalize();
-      // +flexionRad around +X transepicondylarAxis rotates inferior tibia (-Y) toward posterior (-Z)
-      const flexQ = new THREE.Quaternion().setFromAxisAngle(axis, kinematics.flexionRad);
-      const screwQ = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        (kinematics.screwHomeDeg * Math.PI) / 180
-      );
-      r.tibiaPivot.quaternion.copy(flexQ).multiply(screwQ);
-    }
-
-    if (r.tibiaTranslational && landmarks) {
-      r.tibiaTranslational.position.set(
-        -landmarks.transepicondylarPivot[0],
-        -landmarks.transepicondylarPivot[1],
-        -landmarks.transepicondylarPivot[2] + kinematics.anteriorTranslationThree
-      );
-    }
-
-    if (r.patellaGroup) {
-      r.patellaGroup.position.set(0, kinematics.patellaDropY, kinematics.patellaShiftZ);
-      r.patellaGroup.rotation.x = kinematics.patellaTiltRad;
-    }
-
-    if (r.medMenGroup) {
-      r.medMenGroup.position.set(
-        kinematics.medialMeniscusShiftX,
-        0,
-        kinematics.meniscusPosteriorShiftZ
-      );
-    }
-
-    const isAclBad = chapter.id === 'acl-rupture' || chapter.id === 'unhappy-triad';
-
-    if (r.kissingContusions) {
-      r.kissingContusions.visible = isAclBad;
-    }
-    if (r.rootTearMarker) {
-      r.rootTearMarker.visible = chapter.id === 'posterior-root' && visibility.menisci;
-    }
-
-    // Live cross-section clipping synchronized with active MRI plane & RAS coordinate
-    if (visibility.crossSection && landmarks && mriCrosshairRas) {
-      const pt = rasToThree(mriCrosshairRas, landmarks.jointCenterRas, landmarks.threeScale);
-      if (mriPlaneMode === 'coronal') {
-        r.clipPlane.setFromNormalAndCoplanarPoint(
-          new THREE.Vector3(0, 0, -1),
-          new THREE.Vector3(pt[0], pt[1], pt[2])
-        );
-      } else if (mriPlaneMode === 'axial') {
-        r.clipPlane.setFromNormalAndCoplanarPoint(
-          new THREE.Vector3(0, -1, 0),
-          new THREE.Vector3(pt[0], pt[1], pt[2])
-        );
-      } else {
-        r.clipPlane.setFromNormalAndCoplanarPoint(
-          new THREE.Vector3(-1, 0, 0),
-          new THREE.Vector3(pt[0], pt[1], pt[2])
-        );
-      }
-    } else {
-      r.clipPlane.set(new THREE.Vector3(0, 0, -1), 100);
-    }
-
-    syncSpecimenMaterialsAndVisibility({
-      meshes: r.meshes,
-      materials: r.materials,
-      xrayUniform: r.xrayUniform,
-      visibility,
-      chapterId: chapter.id,
+    const refs = sceneRefs.current;
+    if (!refs) return;
+    const framed = computeFramedCamera(
+      cameraPreset,
+      cameraDistanceScale,
+      moduleId,
       activeStructure,
-      hoveredStructure,
-    });
-  }, [
-    landmarks,
-    chapter,
-    kinematics,
-    visibility,
-    activeStructure,
-    hoveredStructure,
-    mriPlaneMode,
-    mriCrosshairRas,
-    loading,
-  ]);
+      stageRef.current
+    );
+    refs.animTargetLook = framed.target;
+    refs.animTargetPos = framed.pos;
+  }, [cameraPreset, cameraDistanceScale, cameraTrigger, moduleId, activeStructure, modelReady]);
 
-  const applyCameraPreset = (presetId: CameraPresetKey) => {
-    setManualPreset({ chapterId: chapter.id, preset: presetId });
-    const preset = CAMERA_PRESETS.find((p) => p.id === presetId);
-    const tween = sceneRefs.current.tween;
-    if (preset && tween) {
-      tween.destPos.set(...preset.position);
-      tween.destTarget.set(...preset.target);
-      tween.active = true;
-    }
+  const handleZoomStep = (factor: number) => {
+    const refs = sceneRefs.current;
+    if (!refs) return;
+    const target = refs.animTargetLook ?? refs.controls.target.clone();
+    const curPos = refs.animTargetPos ?? refs.camera.position.clone();
+    const offset = curPos.clone().sub(target);
+    const nextDist = THREE.MathUtils.clamp(
+      offset.length() * factor,
+      refs.controls.minDistance,
+      refs.controls.maxDistance
+    );
+    offset.setLength(nextDist);
+    refs.animTargetLook = target;
+    refs.animTargetPos = target.clone().add(offset);
   };
 
-  const selectedInfo = STRUCTURES_INFO[activeStructure];
-  const selectedLandmark = landmarks?.structures[activeStructure];
+  const handleResetView = () => {
+    const refs = sceneRefs.current;
+    if (!refs) return;
+    const framed = computeFramedCamera(
+      cameraPreset,
+      cameraDistanceScale,
+      moduleId,
+      activeStructure,
+      stageRef.current
+    );
+    refs.animTargetLook = framed.target;
+    refs.animTargetPos = framed.pos;
+  };
 
-  const tissueToggles: Array<{ key: keyof TissueVisibility; label: string; title?: string }> = [
-    { key: 'xrayBones', label: 'X-Ray Bone', title: 'Fresnel cortical X-ray view (Shortcut X)' },
-    { key: 'thicknessMap', label: 'Thickness (mm)', title: 'OpenMSK chondral thickness map (Shortcut T)' },
-    { key: 'bones', label: 'Bones' },
-    { key: 'extensor', label: 'Extensor' },
-    { key: 'cartilage', label: 'Cartilage' },
-    { key: 'menisci', label: 'Menisci' },
-    { key: 'cruciates', label: 'Cruciates' },
-    { key: 'collaterals', label: 'Collaterals' },
-    { key: 'callouts', label: 'Labels', title: 'Anatomical pins (Shortcut L)' },
-    { key: 'crossSection', label: 'MRI Cut', title: 'Clip 3D along MRI slice (Shortcut S)' },
-  ];
+  const focusedLabel = useMemo(() => {
+    if (targetBadge) return targetBadge;
+    return STRUCTURES_INFO[activeStructure]?.shortLabel ?? activeStructure;
+  }, [targetBadge, activeStructure]);
 
-  const calloutButtons = useMemo(
-    () =>
-      CALLOUT_STRUCTURES.map((sid) => ({
-        id: sid,
-        label: STRUCTURES_INFO[sid].shortLabel,
-      })),
-    []
-  );
+  const toggleLayer = (key: keyof TissueVisibility) => {
+    onChangeVisibility({ ...visibility, [key]: !visibility[key] });
+  };
 
   return (
-    <section className="stage-pane" aria-label="3D OpenMSK Right Knee Segmented Specimen">
-      <div className="pane-header">
-        <div className="pane-heading">
-          <h2 className="pane-title">3D Anatomical Atlas</h2>
-          <span className="pane-note">Right Knee · 16 parts · PBR + AO</span>
+    <section className="stage-pane" aria-label="Interactive 3D knee specimen">
+      {/* Simplified Header: Specimen View Segmented Pill + Layers Popover */}
+      <header className="pane-header">
+        <div className="pane-title-group">
+          <span className="pane-title">3D Knee Specimen</span>
+          <span className="pane-badge">{landmarks?.laterality ?? 'Right'} · 3T OpenMSK</span>
         </div>
 
-        <div className="seg-group" role="tablist" aria-label="Camera presets">
-          {CAMERA_PRESETS.map((preset) => {
-            const active = preset.id === activePreset;
-            return (
+        <div className="pane-actions">
+          <div className="segmented-pill" role="tablist" aria-label="3D view mode">
+            {VIEW_MODES.map((m) => (
               <button
-                key={preset.id}
+                key={m.id}
                 type="button"
                 role="tab"
-                aria-selected={active}
-                className={`seg-btn ${active ? 'active' : ''}`}
-                onClick={() => applyCameraPreset(preset.id)}
+                aria-selected={viewMode === m.id}
+                className={`pill-btn ${viewMode === m.id ? 'active' : ''}`}
+                onClick={() => onChangeViewMode(m.id)}
               >
-                {active && (
-                  <motion.span
-                    layoutId="camera-preset-pill"
-                    className="seg-indicator"
-                    transition={{ type: 'spring', stiffness: 520, damping: 38 }}
-                  />
-                )}
-                {preset.label}
+                {m.label}
               </button>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
 
-      <div className="specimen-stage">
-        <div ref={hostRef} className="three-host" />
-        <svg ref={svgRef} className="callout-svg" aria-hidden="true" />
-
-        <div className="callout-pills-layer">
-          {calloutButtons.map((cb) => (
+          <div className="popover-anchor" ref={layersRef}>
             <button
-              key={cb.id}
-              ref={(el) => {
-                pillRefs.current[cb.id] = el;
-              }}
               type="button"
-              className={`callout-pill ${activeStructure === cb.id ? 'active' : ''}`}
-              style={{ opacity: 0, left: 0, top: 0 }}
-              onClick={() => {
-                const lm = landmarks?.structures[cb.id];
-                onSelectStructure(cb.id, lm ? lm.centroidRas : [112, 21, -12]);
-              }}
+              className={`chip-btn ${layersMenuOpen ? 'active' : ''}`}
+              onClick={() => setLayersMenuOpen((v) => !v)}
+              aria-expanded={layersMenuOpen}
             >
-              {cb.label}
+              <Layers size={13} />
+              <span>Layers</span>
+              <ChevronDown size={12} />
             </button>
-          ))}
-        </div>
 
-        <div className="tissue-strip">
-          {tissueToggles.map((t) => (
+            {layersMenuOpen && (
+              <div className="popover-panel" role="dialog" aria-label="3D layers and camera angles">
+                <div className="popover-section">
+                  <div className="popover-heading">Camera Viewpoint</div>
+                  <div className="camera-grid">
+                    {(Object.keys(CAMERA_PRESETS) as CameraPresetKey[]).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`mini-chip ${cameraPreset === key ? 'active' : ''}`}
+                        onClick={() => {
+                          onSelectCameraPreset(key);
+                          setLayersMenuOpen(false);
+                        }}
+                      >
+                        {CAMERA_PRESETS[key].label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="popover-section">
+                  <div className="popover-heading">Tissue Visibility</div>
+                  <div className="layer-checks">
+                    {(
+                      [
+                        ['bones', 'Femur, Tibia & Fibula'],
+                        ['extensor', 'Patella & Extensor Tendons'],
+                        ['cartilage', 'Hyaline Cartilage'],
+                        ['menisci', 'Medial & Lateral Menisci'],
+                        ['cruciates', 'Cruciates (ACL / PCL)'],
+                        ['collaterals', 'Collaterals (MCL / LCL)'],
+                      ] as Array<[keyof TissueVisibility, string]>
+                    ).map(([k, lbl]) => (
+                      <label key={k} className="check-row">
+                        <input
+                          type="checkbox"
+                          checked={visibility[k]}
+                          onChange={() => toggleLayer(k)}
+                        />
+                        <span>{lbl}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="popover-section">
+                  <div className="popover-heading">Overlay Helpers</div>
+                  <div className="layer-checks">
+                    <label className="check-row">
+                      <input type="checkbox" checked={showAllLabels} onChange={onToggleAllLabels} />
+                      <span>All 8 Anatomy Labels (L)</span>
+                    </label>
+                    <label className="check-row">
+                      <input
+                        type="checkbox"
+                        checked={showSlicePlane}
+                        onChange={onToggleSlicePlane}
+                      />
+                      <span>MRI Slice Reference Plane</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {onToggleFullScreenPage && (
             <button
-              key={t.key}
               type="button"
-              title={t.title}
-              className={`chip-toggle ${visibility[t.key] ? 'active' : ''}`}
-              onClick={() => onToggleVisibility(t.key)}
+              className={`chip-btn ${isFullScreenPage ? 'active' : ''}`}
+              onClick={onToggleFullScreenPage}
+              title={isFullScreenPage ? 'Return to split 3D + MRI view' : 'Open full-screen 3D view'}
             >
-              {t.label}
+              {isFullScreenPage ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              <span>{isFullScreenPage ? 'Exit Full 3D' : 'Full 3D'}</span>
             </button>
-          ))}
+          )}
         </div>
+      </header>
 
-        {visibility.thicknessMap && (
-          <div className="thickness-legend" aria-label="Cartilage thickness colormap">
-            <div className="thickness-legend-head">
-              <span>Chondral Thickness</span>
-              <span>BScore {landmarks?.bScore ?? -0.203}</span>
-            </div>
-            <div className="thickness-bar" />
-            <div className="thickness-scale">
-              <span>0.0 mm</span>
-              <span>1.9 mm</span>
-              <span>3.8 mm</span>
-            </div>
+      {/* 3D Canvas Viewport */}
+      <div className="viewport-body" ref={stageRef}>
+        {!modelReady && !loadError && (
+          <div className="viewport-status">
+            <span>Loading 3T Knee Mesh… {loadProgress}%</span>
+          </div>
+        )}
+        {loadError && (
+          <div className="viewport-status error">
+            <span>{loadError}</span>
           </div>
         )}
 
-        <div className="structure-inspector">
-          <div>
-            <div className="inspector-title">{selectedInfo.name}</div>
-            <div className="inspector-body">{selectedInfo.mriSignal}</div>
-            <div className="inspector-body" style={{ color: 'var(--text-primary)', marginTop: 3 }}>
-              {selectedInfo.clinicalPearl}
-            </div>
-          </div>
-          <div className="inspector-coords">
-            <div>{selectedInfo.group}</div>
-            {selectedLandmark && (
-              <div style={{ marginTop: 3 }}>
-                ({selectedLandmark.centroidRas[0]}, {selectedLandmark.centroidRas[1]},{' '}
-                {selectedLandmark.centroidRas[2]}) mm
+        {/* Single Focused Callout Pin OR All 8 Pins */}
+        {modelReady && !hideLabels && !showAllLabels && focusedPin.visible && (() => {
+          const cw = stageSize.w || stageRef.current?.clientWidth || 480;
+          const estW = Math.max(96, focusedLabel.length * 7.3 + 24);
+          const placeLeft = focusedPin.x > cw * 0.56;
+          const badgeX = placeLeft
+            ? Math.max(10, Math.min(focusedPin.x - estW - 20, cw - estW - 12))
+            : Math.max(10, Math.min(focusedPin.x + 24, cw - estW - 12));
+          const badgeY = Math.max(focusedPin.y - 36, 12);
+          const lineEndX = placeLeft ? badgeX + estW - 6 : badgeX + 8;
+          return (
+            <div
+              className="callout-layer"
+              aria-hidden="true"
+              style={{ pointerEvents: 'none' }}
+            >
+              <svg className="callout-svg">
+                <line
+                  x1={focusedPin.x}
+                  y1={focusedPin.y}
+                  x2={lineEndX}
+                  y2={badgeY + 11}
+                  stroke="rgba(125, 211, 252, 0.85)"
+                  strokeWidth="1.5"
+                />
+                <circle
+                  cx={focusedPin.x}
+                  cy={focusedPin.y}
+                  r="4.5"
+                  fill="#38bdf8"
+                  stroke="#0f172a"
+                  strokeWidth="1.5"
+                />
+              </svg>
+              <div
+                className="focused-callout-badge"
+                style={{
+                  left: `${badgeX}px`,
+                  top: `${badgeY}px`,
+                }}
+              >
+                {focusedLabel}
               </div>
+            </div>
+          );
+        })()}
+
+        {modelReady && !hideLabels && showAllLabels && (
+          <div className="callout-layer" aria-hidden="false">
+            {ALL_PIN_STRUCTURES.map((sid) => {
+              const p = allPins[sid];
+              if (!p || !p.visible) return null;
+              const info = STRUCTURES_INFO[sid];
+              const active = sid === activeStructure;
+              return (
+                <button
+                  key={sid}
+                  type="button"
+                  className={`pin-pill ${active ? 'active' : ''}`}
+                  style={{ left: `${p.x}px`, top: `${p.y}px` }}
+                  onClick={() => onSelectStructure(sid)}
+                >
+                  {info.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Bottom-Left Subtle Kinematics Readout + Cartilage Colorbar when in Cartilage Map */}
+        <div className="stage-hud-left">
+          {viewMode === 'cartilage-map' && (
+            <div className="chondral-scale-card">
+              <span className="scale-lbl">0.0 mm</span>
+              <div className="scale-gradient" />
+              <span className="scale-lbl">3.8 mm</span>
+            </div>
+          )}
+          <div className="telemetry-chip">
+            <span>{Math.round(flexionDeg)}° Flex</span>
+            <span>·</span>
+            <span>Drawer {kinematics.anteriorDrawerMm >= 0 ? `+${kinematics.anteriorDrawerMm}` : kinematics.anteriorDrawerMm} mm</span>
+            {moduleId === 'posterior-root' && (
+              <>
+                <span>·</span>
+                <span className="text-alert">Extrusion +{kinematics.meniscalExtrusionMm} mm</span>
+              </>
             )}
           </div>
         </div>
 
-        {loading && <div className="loading-overlay">Loading 16-part In-Vivo 3T Knee GLB…</div>}
-        {loadError && (
-          <div className="loading-overlay" style={{ color: 'var(--accent-crimson)' }}>
-            3D load error: {loadError}
+        {/* Bottom-Right Zoom & Reset Pill + Quick Eye Mode Hint */}
+        <div className="stage-hud-right">
+          {viewMode !== 'solid' && (
+            <button
+              type="button"
+              className="quick-ghost-pill"
+              onClick={() => onChangeViewMode('solid')}
+              title="Restore solid bones"
+            >
+              <Eye size={12} />
+              <span>Solid Bone</span>
+            </button>
+          )}
+          <div className="zoom-pill" role="group" aria-label="3D zoom controls">
+            <button
+              type="button"
+              className="zoom-btn"
+              onClick={() => handleZoomStep(1.28)}
+              title="Zoom out 3D specimen"
+              aria-label="Zoom out 3D"
+            >
+              <Minus size={13} />
+            </button>
+            <button
+              type="button"
+              className="zoom-reset-btn"
+              onClick={handleResetView}
+              title="Reset camera angle & zoom"
+            >
+              <RotateCcw size={12} />
+              <span>Reset</span>
+            </button>
+            <button
+              type="button"
+              className="zoom-btn"
+              onClick={() => handleZoomStep(0.76)}
+              title="Zoom in 3D specimen"
+              aria-label="Zoom in 3D"
+            >
+              <Plus size={13} />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </section>
   );

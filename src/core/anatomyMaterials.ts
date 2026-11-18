@@ -281,9 +281,9 @@ export function attachFresnelXrayShader(
         if (uXrayMode > 0.5) {
           vec3 xN = normalize(normal);
           vec3 xV = normalize(vViewPosition);
-          float fresnel = pow(1.0 - abs(dot(xN, xV)), 2.25);
-          diffuseColor.a = clamp(0.05 + 0.54 * fresnel, 0.05, 0.60);
-          outgoingLight = mix(outgoingLight * 0.42, vec3(0.72, 0.82, 0.96), fresnel * 0.76);
+          float fresnel = pow(1.0 - abs(dot(xN, xV)), 2.4);
+          diffuseColor.a = clamp(0.03 + 0.34 * fresnel, 0.03, 0.38);
+          outgoingLight = mix(outgoingLight * 0.28, vec3(0.50, 0.68, 0.90), fresnel * 0.68);
         }
         #include <opaque_fragment>
         `
@@ -328,60 +328,62 @@ export function createTissueMaterial(
   if (CARTILAGE_NAMES.has(name)) {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
-      color: 0xeef3f8,
-      roughness: 0.14,
+      color: 0xd8edf9,
+      roughness: 0.16,
       metalness: 0.0,
-      clearcoat: 0.92,
-      clearcoatRoughness: 0.08,
+      clearcoat: 0.88,
+      clearcoatRoughness: 0.1,
       ior: 1.44,
-      sheen: 0.24,
+      sheen: 0.22,
       sheenColor: new THREE.Color(0xffffff),
-      envMapIntensity: 0.95,
+      envMapIntensity: 0.9,
     });
-    mat.userData.baseColorHex = 0xeef3f8;
+    attachFresnelXrayShader(mat, xrayUniform);
+    mat.userData.baseColorHex = 0xd8edf9;
+    mat.userData.xrayColorHex = 0xa9cce3;
     return mat;
   }
 
   if (name === 'BucketHandleFragment') {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
-      color: 0xa6262a,
+      color: 0xc2272d,
       roughness: 0.28,
-      clearcoat: 0.42,
+      clearcoat: 0.44,
       clearcoatRoughness: 0.2,
       normalMap: bank.fibrocartilageNormal,
       normalScale: new THREE.Vector2(0.24, 0.24),
     });
-    mat.userData.baseColorHex = 0xa6262a;
+    mat.userData.baseColorHex = 0xc2272d;
     return mat;
   }
 
   if (name === 'MedialMeniscusTruncated') {
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
-      color: 0xadb9c6,
+      color: 0x456e80,
       roughness: 0.32,
       clearcoat: 0.42,
-      clearcoatRoughness: 0.25,
+      clearcoatRoughness: 0.22,
       normalMap: bank.fibrocartilageNormal,
-      normalScale: new THREE.Vector2(0.22, 0.22),
+      normalScale: new THREE.Vector2(0.24, 0.24),
     });
-    mat.userData.baseColorHex = 0xadb9c6;
+    mat.userData.baseColorHex = 0x456e80;
     return mat;
   }
 
   if (MENISCUS_NAMES.has(name)) {
-    const hex = name === 'MedialMeniscus' ? 0xb8c5d3 : 0xb0bece;
+    const hex = name === 'MedialMeniscus' ? 0x3b6e84 : 0x325b6e;
     const mat = new THREE.MeshPhysicalMaterial({
       ...common,
       color: hex,
-      roughness: 0.28,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.2,
-      sheen: 0.18,
-      sheenColor: new THREE.Color(0xe5edf5),
+      roughness: 0.3,
+      clearcoat: 0.48,
+      clearcoatRoughness: 0.18,
+      sheen: 0.2,
+      sheenColor: new THREE.Color(0xc5dce8),
       normalMap: bank.fibrocartilageNormal,
-      normalScale: new THREE.Vector2(0.22, 0.22),
+      normalScale: new THREE.Vector2(0.25, 0.25),
     });
     mat.userData.baseColorHex = hex;
     return mat;
@@ -417,22 +419,44 @@ export function createTissueMaterial(
   return mat;
 }
 
-function applyBoneXrayState(mat: THREE.MeshPhysicalMaterial, xray: boolean): void {
+function applyBoneXrayState(mat: THREE.MeshPhysicalMaterial, xray: boolean): boolean {
+  const prev = mat.userData.xrayApplied;
   mat.side = xray ? THREE.FrontSide : THREE.DoubleSide;
   mat.transparent = xray;
-  mat.opacity = 1.0;
+  mat.opacity = xray ? 0.24 : 1.0;
   mat.depthWrite = !xray;
-  mat.clearcoat = xray ? 0 : 0.08;
+  mat.clearcoat = xray ? 0 : 0.06;
   mat.color.setHex(
     xray ? (mat.userData.xrayColorHex as number) : (mat.userData.baseColorHex as number)
   );
+  mat.userData.xrayApplied = xray;
+  return prev !== xray;
 }
 
-function applyThicknessColorState(mat: THREE.MeshPhysicalMaterial, enabled: boolean): void {
-  if (mat.vertexColors !== enabled) {
-    mat.vertexColors = enabled;
-    mat.color.setHex(enabled ? 0xffffff : (mat.userData.baseColorHex as number));
+function applyCartilageState(
+  mat: THREE.MeshPhysicalMaterial,
+  thicknessEnabled: boolean,
+  xrayBones: boolean
+): boolean {
+  const glass = xrayBones && !thicknessEnabled;
+  const prevGlass = mat.userData.glassApplied;
+  const prevThick = mat.vertexColors;
+  if (mat.vertexColors !== thicknessEnabled) {
+    mat.vertexColors = thicknessEnabled;
   }
+  mat.transparent = glass;
+  mat.opacity = glass ? 0.14 : 1.0;
+  mat.depthWrite = !glass;
+  mat.side = glass ? THREE.FrontSide : THREE.DoubleSide;
+  mat.color.setHex(
+    thicknessEnabled
+      ? 0xffffff
+      : glass
+        ? ((mat.userData.xrayColorHex as number | undefined) ?? 0xa9cce3)
+        : (mat.userData.baseColorHex as number)
+  );
+  mat.userData.glassApplied = glass;
+  return prevGlass !== glass || prevThick !== thicknessEnabled;
 }
 
 export interface SpecimenSyncParams {
@@ -448,6 +472,7 @@ export interface SpecimenSyncParams {
     menisci: boolean;
     cruciates: boolean;
     collaterals: boolean;
+    plateauDissection?: boolean;
   };
   chapterId: string;
   activeStructure: string;
@@ -464,24 +489,26 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
   const isAclBad = chapterId === 'acl-rupture' || chapterId === 'unhappy-triad';
   const isPclBad = chapterId === 'pcl-dashboard';
   const isMclBad = chapterId === 'unhappy-triad';
+  const plateauOnly = Boolean(visibility.plateauDissection);
 
   for (const [name, mesh] of meshes) {
     const mat = materials.get(name);
     if (!mat) continue;
 
+    let shaderDirty = false;
     if (BONE_NAMES.has(name)) {
-      mesh.visible = visibility.bones;
-      applyBoneXrayState(mat, visibility.xrayBones);
+      mesh.visible = visibility.bones && !(plateauOnly && name === 'Femur');
+      shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
     } else if (EXTENSOR_NAMES.has(name)) {
-      mesh.visible = visibility.extensor;
+      mesh.visible = visibility.extensor && !plateauOnly;
       if (name === 'Patella') {
-        applyBoneXrayState(mat, visibility.xrayBones);
+        shaderDirty = applyBoneXrayState(mat, visibility.xrayBones);
       } else if (name === 'PatellarCartilage') {
-        applyThicknessColorState(mat, visibility.thicknessMap);
+        shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
       }
     } else if (CARTILAGE_NAMES.has(name)) {
-      mesh.visible = visibility.cartilage;
-      applyThicknessColorState(mat, visibility.thicknessMap);
+      mesh.visible = visibility.cartilage && !(plateauOnly && name === 'FemoralCartilage');
+      shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
     } else if (MENISCUS_NAMES.has(name)) {
       if (name === 'MedialMeniscus') {
         mesh.visible = visibility.menisci && !isBucket;
@@ -509,24 +536,33 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
     if (isPatho) {
       mat.emissive.setHex(0x7f1d1d);
       mat.emissiveIntensity = isSelected ? 0.55 : 0.34;
-      if (name === 'ACL' && isAclBad) {
+      if (name === 'ACL' && isAclBad && !mat.transparent) {
         mat.transparent = true;
         mat.opacity = 0.68;
+        shaderDirty = true;
       }
     } else if (isSelected) {
       mat.emissive.setHex(0x38bdf8);
       mat.emissiveIntensity = 0.28;
+      if (name === 'ACL' && mat.transparent) {
+        mat.transparent = false;
+        mat.opacity = 1.0;
+        shaderDirty = true;
+      }
     } else if (isHovered) {
       mat.emissive.setHex(0x0284c7);
       mat.emissiveIntensity = 0.16;
     } else {
       mat.emissive.setHex(0x000000);
       mat.emissiveIntensity = 0;
-      if (name === 'ACL') {
+      if (name === 'ACL' && mat.transparent) {
         mat.transparent = false;
         mat.opacity = 1.0;
+        shaderDirty = true;
       }
     }
-    mat.needsUpdate = true;
+    if (shaderDirty) {
+      mat.needsUpdate = true;
+    }
   }
 }
