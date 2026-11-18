@@ -89,24 +89,24 @@ export const ANATOMY_SYSTEM_GROUPS: AnatomySystemGroup[] = [
           id: 'anat-femur',
           label: 'Distal Femur (Overview)',
           structureId: 'Femur',
-          targetRas: [110.9, 27.6, 19.4],
+          targetRas: [112.6, 26.0, 12.0],
           cameraPreset: 'anterior',
           cameraDistanceScale: 1.05,
           viewMode3D: 'solid',
-          mriPlane: 'coronal',
-          mriContrast: 'trabecular',
-          mriZoom: 1.15,
+          mriPlane: 'sagittal',
+          mriContrast: 'qdess-clinical',
+          mriZoom: 1.1,
           mriAnnotations: [
             {
               kind: 'arrow',
-              fromRas: [148.0, 27.6, 38.0],
-              toRas: [122.0, 27.6, 20.0],
+              fromRas: [112.6, 46.0, 32.0],
+              toRas: [112.6, 28.0, 14.0],
               tone: 'cyan',
-              label: 'Distal Femoral Shaft',
+              label: 'Distal Femoral Condyle & Trochlea',
             },
           ],
           keyFact:
-            'Dark low-signal cortical rim enclosing fat-suppressed trabecular marrow on 3T qDESS.',
+            'Dark low-signal cortical rim enclosing fat-suppressed trabecular marrow on native high-resolution 0.31 mm 3T qDESS.',
         },
         subLandmarks: [
           {

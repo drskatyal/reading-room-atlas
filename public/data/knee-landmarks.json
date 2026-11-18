@@ -32,20 +32,20 @@
   },
   "wlPresets": {
     "qdess-clinical": {
-      "min": 14,
-      "max": 222
+      "min": 22,
+      "max": 230
     },
     "meniscus-cruciate": {
-      "min": 18,
-      "max": 148
+      "min": 20,
+      "max": 188
     },
     "chondral": {
-      "min": 35,
-      "max": 235
+      "min": 28,
+      "max": 242
     },
     "trabecular": {
-      "min": 2,
-      "max": 115
+      "min": 14,
+      "max": 168
     }
   },
   "jointCenterRas": [

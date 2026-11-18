@@ -35,6 +35,7 @@ interface RealKneeMriViewerProps {
   mriZoom: number;
   onMriZoomChange: (zoom: number) => void;
   targetRasMm: [number, number, number] | null;
+  focusTrigger?: number;
   targetBadge?: string;
   mriAnnotations?: MriAnnotation[];
   showTargetPointer: boolean;
@@ -153,6 +154,7 @@ export function RealKneeMriViewer({
   mriZoom,
   onMriZoomChange,
   targetRasMm,
+  focusTrigger = 0,
   targetBadge,
   mriAnnotations = [],
   showTargetPointer,
@@ -175,7 +177,8 @@ export function RealKneeMriViewer({
   const baseLoadedRef = useRef(false);
   const loadedOverlayFileRef = useRef<'atlas' | 'subregions'>('atlas');
   const suppressingSyncRef = useRef(false);
-  const userClickedAtRef = useRef(0);
+  const wheelAccumRef = useRef(0);
+  const lastPanSigRef = useRef('');
   const currentMmRef = useRef<[number, number, number]>([112.6, 20.6, -11.9]);
 
   const propsRef = useRef({
@@ -186,6 +189,7 @@ export function RealKneeMriViewer({
     hideTargetForQuiz,
     landmarks,
     quizCandidateStructures,
+    hasAnnotations: mriAnnotations.length > 0,
     onRasCrosshairChange,
     onSelectStructureFromMri,
     onQuizMriClick,
@@ -199,6 +203,7 @@ export function RealKneeMriViewer({
     hideTargetForQuiz,
     landmarks,
     quizCandidateStructures,
+    hasAnnotations: mriAnnotations.length > 0,
     onRasCrosshairChange,
     onSelectStructureFromMri,
     onQuizMriClick,
@@ -208,6 +213,13 @@ export function RealKneeMriViewer({
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [wlMenuOpen, setWlMenuOpen] = useState(false);
+  const [mouseTool, setMouseTool] = useState<'scroll' | 'pan'>('scroll');
+  const mouseToolRef = useRef<'scroll' | 'pan'>('scroll');
+  mouseToolRef.current = mouseTool;
+  const [sliceInfo, setSliceInfo] = useState<{ index: number; total: number }>({
+    index: 48,
+    total: 96,
+  });
   const [internalOverlayMode, setInternalOverlayMode] = useState<MriOverlayMode>('none');
   const overlayMode = overlayModeProp ?? internalOverlayMode;
   const setOverlayMode = useCallback(
@@ -355,7 +367,7 @@ export function RealKneeMriViewer({
             ? Math.abs(cur[2] - tgt[2])
             : Math.abs(cur[0] - tgt[0]);
 
-    if (perpDist > 16.0) {
+    if (perpDist > 10.5) {
       setSpotlight((prev) =>
         !prev.offSlice || prev.visible ? { x: 0, y: 0, visible: false, offSlice: true } : prev
       );
@@ -394,8 +406,77 @@ export function RealKneeMriViewer({
       }
       return { x, y, visible: inBounds, offSlice: false };
     });
-    setRenderTick((t) => (t + 1) % 10000);
+
+    const panSig = `${Array.from(nv.scene.pan2Dxyzmm)
+      .map((v) => v.toFixed(2))
+      .join(',')}|${canvas.clientWidth}x${canvas.clientHeight}`;
+    if (p.hasAnnotations || panSig !== lastPanSigRef.current) {
+      lastPanSigRef.current = panSig;
+      setRenderTick((t) => (t + 1) % 10000);
+    }
   }, [projectRas]);
+
+  const syncSliceReadout = useCallback((nv: Niivue, fracPos: number[]) => {
+    const plane = propsRef.current.planeMode;
+    const axisIdx = plane === 'coronal' ? 1 : plane === 'axial' ? 2 : 0;
+    const dims = nv.volumes[0]?.hdr?.dims;
+    const total = Math.max(1, Math.round(dims?.[axisIdx + 1] ?? (axisIdx === 0 ? 96 : 512)));
+    const rawFrac = fracPos[axisIdx];
+    if (typeof rawFrac === 'number') {
+      const clamped = Math.max(0, Math.min(1, rawFrac));
+      setSliceFrac(Number(clamped.toFixed(3)));
+      const idx = Math.max(1, Math.min(total, Math.round(clamped * (total - 1)) + 1));
+      setSliceInfo((prev) => (prev.index === idx && prev.total === total ? prev : { index: idx, total }));
+    }
+  }, []);
+
+  const stepSliceBy = useCallback(
+    (deltaSteps: number, clientX?: number, clientY?: number) => {
+      const nv = nvRef.current;
+      const canvas = canvasRef.current;
+      if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !canvas || deltaSteps === 0) return;
+
+      const plane = propsRef.current.planeMode;
+      let axisIdx = plane === 'coronal' ? 1 : plane === 'axial' ? 2 : 0;
+
+      if (
+        plane === 'multiplanar' &&
+        typeof clientX === 'number' &&
+        typeof clientY === 'number' &&
+        nv.screenSlices?.length
+      ) {
+        const rect = canvas.getBoundingClientRect();
+        const devX = (clientX - rect.left) * (canvas.width / Math.max(1, rect.width));
+        const devY = (clientY - rect.top) * (canvas.height / Math.max(1, rect.height));
+        for (const tile of nv.screenSlices) {
+          if (tile.axCorSag > SLICE_TYPE.SAGITTAL || !tile.leftTopWidthHeight?.length) continue;
+          let left = tile.leftTopWidthHeight[0];
+          const top = tile.leftTopWidthHeight[1];
+          let width = tile.leftTopWidthHeight[2];
+          const height = tile.leftTopWidthHeight[3];
+          if (width < 0) {
+            left += width;
+            width = -width;
+          }
+          if (devX >= left && devX <= left + width && devY >= top && devY <= top + height) {
+            axisIdx = 2 - tile.axCorSag;
+            break;
+          }
+        }
+      }
+
+      const dims = nv.volumes[0].hdr?.dims;
+      const total = Math.max(1, Math.round(dims?.[axisIdx + 1] ?? (axisIdx === 0 ? 96 : 512)));
+      const fracPerStep = axisIdx === 0 ? 1 / total : 2 / total;
+      const pos = [...nv.scene.crosshairPos] as [number, number, number];
+      pos[axisIdx] = Math.max(0.01, Math.min(0.99, pos[axisIdx] + deltaSteps * fracPerStep));
+      nv.scene.crosshairPos = pos;
+      nv.drawScene();
+      nv.createOnLocationChange();
+      syncSliceReadout(nv, pos);
+    },
+    [syncSliceReadout]
+  );
 
   // Initialize NiiVue once
   useEffect(() => {
@@ -406,7 +487,7 @@ export function RealKneeMriViewer({
     const nv = new Niivue({
       backColor: [0.01, 0.015, 0.028, 1],
       crosshairColor: [0.49, 0.83, 0.99, 0.62],
-      crosshairWidth: 0.45,
+      crosshairWidth: 0,
       show3Dcrosshair: false,
       isSliceMM: true,
       isRadiologicalConvention: true,
@@ -415,7 +496,17 @@ export function RealKneeMriViewer({
       isOrientationTextVisible: true,
       textHeight: 0.028,
       fontColor: [0.86, 0.9, 0.96, 0.84],
-      dragMode: DRAG_MODE.pan,
+      scrollRequiresFocus: false,
+      dragMode: DRAG_MODE.windowing,
+      dragModePrimary: DRAG_MODE.none,
+      mouseEventConfig: {
+        leftButton: {
+          primary: DRAG_MODE.none,
+          withShift: DRAG_MODE.pan,
+        },
+        rightButton: DRAG_MODE.windowing,
+        centerButton: DRAG_MODE.pan,
+      },
       multiplanarLayout: MULTIPLANAR_TYPE.GRID,
       multiplanarShowRender: SHOW_RENDER.NEVER,
       sliceType: SLICE_TYPE.SAGITTAL,
@@ -433,49 +524,14 @@ export function RealKneeMriViewer({
       ];
       currentMmRef.current = mm;
 
-      const axisIdx =
-        nv.opts.sliceType === SLICE_TYPE.CORONAL
-          ? 1
-          : nv.opts.sliceType === SLICE_TYPE.AXIAL
-            ? 2
-            : 0;
-      if (loc.frac && typeof loc.frac[axisIdx] === 'number') {
-        setSliceFrac(Number(loc.frac[axisIdx].toFixed(3)));
-      }
-
-      const segSample = loc.values?.[1]?.value;
-      const p = propsRef.current;
-
-      const justClicked = performance.now() - userClickedAtRef.current < 320;
-      if (justClicked && !suppressingSyncRef.current) {
-        userClickedAtRef.current = 0;
-        let pickedId: StructureId | null = null;
-        if (
-          loadedOverlayFileRef.current === 'atlas' &&
-          typeof segSample === 'number' &&
-          Math.round(segSample) > 0
-        ) {
-          pickedId = LABEL_INDEX_TO_ID[Math.round(segSample)] ?? null;
-        }
-        if (!pickedId) {
-          pickedId = findNearestLandmarkStructure(
-            mm,
-            p.landmarks,
-            p.hideTargetForQuiz ? p.quizCandidateStructures : undefined,
-            p.hideTargetForQuiz ? 22 : 18
-          );
-        }
-        if (pickedId) {
-          if (p.hideTargetForQuiz && p.onQuizMriClick) {
-            p.onQuizMriClick(pickedId);
-          } else {
-            p.onSelectStructureFromMri(pickedId);
-          }
-        }
+      if (loc.frac) {
+        syncSliceReadout(nv, loc.frac as number[]);
+      } else {
+        syncSliceReadout(nv, Array.from(nv.scene.crosshairPos));
       }
 
       if (!suppressingSyncRef.current) {
-        p.onRasCrosshairChange(mm);
+        propsRef.current.onRasCrosshairChange(mm);
       }
       recomputeSpotlight();
     };
@@ -485,7 +541,6 @@ export function RealKneeMriViewer({
         await nv.attachToCanvas(canvas);
         if (disposed) return;
         nv.setInterpolation(true);
-        nv.setDragMode(DRAG_MODE.pan);
         readyRef.current = true;
 
         setLoading(true);
@@ -539,6 +594,7 @@ export function RealKneeMriViewer({
         } else {
           applyCenteredZoom(nv, propsRef.current.mriZoom, null);
           nv.updateGLVolume();
+          syncSliceReadout(nv, Array.from(nv.scene.crosshairPos));
         }
         setLoading(false);
       } catch (err) {
@@ -555,46 +611,132 @@ export function RealKneeMriViewer({
       baseLoadedRef.current = false;
       nvRef.current = null;
     };
-  }, [recomputeSpotlight]);
+  }, [recomputeSpotlight, syncSliceReadout]);
 
-  // ResizeObserver + Canvas Click/Pan & Ctrl+Wheel Zoom Listeners
+  // ResizeObserver + PACS Wheel Slice Scroll, Cine-Stack Left-Drag & Structure Pick
   useEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
     if (!wrap || !canvas) return;
 
     let downPos: { x: number; y: number } | null = null;
-    let dragging = false;
+    let cineDragging = false;
+    let lastCineY = 0;
+    let cineAccumY = 0;
+    let panDragging = false;
+    let pointerMoved = false;
+
+    const handleCleanClick = (clientX: number, clientY: number) => {
+      const nv = nvRef.current;
+      if (!nv || !baseLoadedRef.current || !nv.volumes[0] || suppressingSyncRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const dprX = canvas.width / Math.max(1, rect.width);
+      const dprY = canvas.height / Math.max(1, rect.height);
+      const texFrac = nv.canvasPos2frac([
+        (clientX - rect.left) * dprX,
+        (clientY - rect.top) * dprY,
+      ]);
+      if (!texFrac || texFrac[0] < 0) return;
+
+      const mmRaw = nv.frac2mm(texFrac);
+      const mm: [number, number, number] = [mmRaw[0], mmRaw[1], mmRaw[2]];
+      const p = propsRef.current;
+      let pickedId: StructureId | null = null;
+
+      if (loadedOverlayFileRef.current === 'atlas' && nv.volumes[1]?.img && nv.volumes[1]?.hdr) {
+        const vox = nv.frac2vox(texFrac, 1);
+        const dims = nv.volumes[1].hdr.dims;
+        const nx = dims?.[1] ?? 0;
+        const ny = dims?.[2] ?? 0;
+        const nz = dims?.[3] ?? 0;
+        const ix = Math.round(vox[0]);
+        const iy = Math.round(vox[1]);
+        const iz = Math.round(vox[2]);
+        if (ix >= 0 && ix < nx && iy >= 0 && iy < ny && iz >= 0 && iz < nz) {
+          const labelVal = Math.round(nv.volumes[1].img[ix + iy * nx + iz * nx * ny] ?? 0);
+          pickedId = LABEL_INDEX_TO_ID[labelVal] ?? null;
+        }
+      }
+
+      if (!pickedId) {
+        pickedId = findNearestLandmarkStructure(
+          mm,
+          p.landmarks,
+          p.hideTargetForQuiz ? p.quizCandidateStructures : undefined,
+          p.hideTargetForQuiz ? 22 : 18
+        );
+      }
+
+      if (pickedId) {
+        if (p.hideTargetForQuiz && p.onQuizMriClick) {
+          p.onQuizMriClick(pickedId);
+        } else {
+          p.onSelectStructureFromMri(pickedId);
+        }
+      }
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       downPos = { x: e.clientX, y: e.clientY };
-      dragging = true;
+      pointerMoved = false;
+      if (e.button === 0 && !e.shiftKey && !e.ctrlKey && mouseToolRef.current === 'scroll') {
+        cineDragging = true;
+        lastCineY = e.clientY;
+        cineAccumY = 0;
+        panDragging = false;
+      } else {
+        cineDragging = false;
+        panDragging = true;
+      }
     };
-    const onPointerMove = () => {
-      if (dragging) {
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (downPos && !pointerMoved) {
+        if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) >= 4) {
+          pointerMoved = true;
+        }
+      }
+      if (cineDragging) {
+        const dy = e.clientY - lastCineY;
+        lastCineY = e.clientY;
+        cineAccumY += dy;
+        const steps = Math.trunc(cineAccumY / 5);
+        if (steps !== 0) {
+          cineAccumY -= steps * 5;
+          stepSliceBy(steps, e.clientX, e.clientY);
+        }
+      } else if (panDragging) {
         recomputeSpotlight();
       }
     };
+
     const onPointerUp = (e: PointerEvent) => {
-      dragging = false;
-      if (downPos) {
-        const d = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
-        downPos = null;
-        if (d < 5) {
-          userClickedAtRef.current = performance.now();
-        }
+      const wasClick = downPos !== null && !pointerMoved && e.button === 0;
+      downPos = null;
+      cineDragging = false;
+      panDragging = false;
+      if (wasClick) {
+        handleCleanClick(e.clientX, e.clientY);
       }
       window.requestAnimationFrame(() => recomputeSpotlight());
     };
 
     const onWheelCapture = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
       if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        const delta = e.deltaY < 0 ? 0.2 : -0.2;
+        const delta = e.deltaY < 0 ? 0.18 : -0.18;
         propsRef.current.onMriZoomChange(clampZoom(propsRef.current.mriZoom + delta));
-      } else {
-        window.requestAnimationFrame(() => recomputeSpotlight());
+        return;
+      }
+
+      const normDelta = e.deltaMode === 1 ? e.deltaY * 24 : e.deltaY;
+      wheelAccumRef.current += normDelta;
+      const steps = Math.trunc(wheelAccumRef.current / 20);
+      if (steps !== 0) {
+        wheelAccumRef.current -= steps * 20;
+        stepSliceBy(steps, e.clientX, e.clientY);
       }
     };
 
@@ -610,19 +752,35 @@ export function RealKneeMriViewer({
     });
     ro.observe(wrap);
 
-    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointerdown', onPointerDown, { capture: true });
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     wrap.addEventListener('wheel', onWheelCapture, { capture: true, passive: false });
 
     return () => {
       ro.disconnect();
-      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointerdown', onPointerDown, { capture: true });
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       wrap.removeEventListener('wheel', onWheelCapture, { capture: true });
     };
-  }, [recomputeSpotlight]);
+  }, [recomputeSpotlight, stepSliceBy]);
+
+  // Left-Mouse Tool Mode Sync (Scroll vs Pan; Right-Drag stays Window/Level, Shift/Middle stays Pan)
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || !readyRef.current) return;
+    const primary = mouseTool === 'pan' ? DRAG_MODE.pan : DRAG_MODE.none;
+    nv.opts.dragModePrimary = primary;
+    nv.setMouseEventConfig({
+      leftButton: {
+        primary,
+        withShift: DRAG_MODE.pan,
+      },
+      rightButton: DRAG_MODE.windowing,
+      centerButton: DRAG_MODE.pan,
+    });
+  }, [mouseTool]);
 
   // W/L Preset Sync
   useEffect(() => {
@@ -637,17 +795,20 @@ export function RealKneeMriViewer({
     nv.updateGLVolume();
   }, [contrastPreset, landmarks, presetMeta, loading]);
 
-  // Plane Mode Sync
+  // Plane Mode Sync (Hide center crosshair in single-plane views; show in MPR)
   useEffect(() => {
     const nv = nvRef.current;
     if (!nv || !readyRef.current) return;
     const match = PLANE_OPTIONS.find((p) => p.id === planeMode);
     if (match) {
+      nv.opts.crosshairWidth = planeMode === 'multiplanar' ? 0.55 : 0;
       nv.setSliceType(match.sliceType);
-      applyCenteredZoom(nv, mriZoom, targetRasMm);
+      applyCenteredZoom(nv, propsRef.current.mriZoom, currentMmRef.current ?? propsRef.current.targetRasMm);
+      nv.drawScene();
+      syncSliceReadout(nv, Array.from(nv.scene.crosshairPos));
       window.requestAnimationFrame(() => recomputeSpotlight());
     }
-  }, [planeMode, mriZoom, targetRasMm, recomputeSpotlight]);
+  }, [planeMode, recomputeSpotlight, syncSliceReadout]);
 
   // Segmentation Overlay Sync
   useEffect(() => {
@@ -700,26 +861,43 @@ export function RealKneeMriViewer({
     };
   }, [overlayMode, segOpacity, loading]);
 
-  // Crosshair & Centered Zoom Sync on Target RAS change
+  // Crosshair Jump on Explicit Target Focus (Sidebar / Pathology Step / Quiz / Guide Link)
   useEffect(() => {
     const nv = nvRef.current;
-    if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !targetRasMm) return;
+    const ras = propsRef.current.targetRasMm;
+    if (!nv || !baseLoadedRef.current || !nv.volumes[0] || !ras) return;
     suppressingSyncRef.current = true;
-    const frac = nv.mm2frac(targetRasMm);
+    const frac = nv.mm2frac(ras);
     nv.scene.crosshairPos = [
       Math.max(0.01, Math.min(0.99, frac[0])),
       Math.max(0.01, Math.min(0.99, frac[1])),
       Math.max(0.01, Math.min(0.99, frac[2])),
     ];
-    currentMmRef.current = targetRasMm;
-    applyCenteredZoom(nv, mriZoom, targetRasMm);
+    currentMmRef.current = ras;
+    applyCenteredZoom(nv, propsRef.current.mriZoom, ras);
     nv.drawScene();
     nv.createOnLocationChange();
     window.requestAnimationFrame(() => recomputeSpotlight());
     window.setTimeout(() => {
       suppressingSyncRef.current = false;
     }, 50);
-  }, [targetRasMm, mriZoom, recomputeSpotlight]);
+  }, [focusTrigger, recomputeSpotlight]);
+
+  // Zoom Change Centered Around Current Slice Position (Preserves User Scroll Position)
+  useEffect(() => {
+    const nv = nvRef.current;
+    if (!nv || !baseLoadedRef.current || !nv.volumes[0]) return;
+    const curMm = nv.frac2mm(nv.scene.crosshairPos);
+    const focusMm: [number, number, number] = [curMm[0], curMm[1], curMm[2]];
+    applyCenteredZoom(nv, mriZoom, focusMm);
+    nv.drawScene();
+    window.requestAnimationFrame(() => recomputeSpotlight());
+  }, [mriZoom, recomputeSpotlight]);
+
+  // Refresh Target Spotlight When Picking Structures Directly Without Jumping Slice
+  useEffect(() => {
+    window.requestAnimationFrame(() => recomputeSpotlight());
+  }, [targetRasMm, recomputeSpotlight]);
 
   // Refresh vector overlay positions immediately whenever sub-step annotations change or initial volume load finishes
   useEffect(() => {
@@ -785,6 +963,7 @@ export function RealKneeMriViewer({
     nv.scene.crosshairPos = pos;
     nv.drawScene();
     nv.createOnLocationChange();
+    syncSliceReadout(nv, pos);
   };
 
   return (
@@ -902,7 +1081,7 @@ export function RealKneeMriViewer({
 
       {/* MRI Canvas Viewport + On-MRI Target Spotlight Ring */}
       <div className="mri-canvas-wrap" ref={wrapRef}>
-        <canvas ref={canvasRef} className="mri-canvas" />
+        <canvas ref={canvasRef} className="mri-canvas" data-tool={mouseTool} />
 
         {loading && !errorMsg && (
           <div className="viewport-status">
@@ -962,16 +1141,18 @@ export function RealKneeMriViewer({
         )}
       </div>
 
-      {/* Bottom Scrubber + Landmark-Centered Zoom Bar */}
+      {/* Bottom Scrubber + Scroll/Pan Mode + Landmark-Centered Zoom Bar */}
       <footer className="mri-footer-bar">
         <div className="slice-control">
-          <span className="footer-label">Slice</span>
+          <span className="footer-label">
+            Slice {sliceInfo.index}/{sliceInfo.total}
+          </span>
           <input
             type="range"
             className="slice-slider"
-            min={0.05}
-            max={0.95}
-            step={0.005}
+            min={0.01}
+            max={0.99}
+            step={0.004}
             value={sliceFrac}
             onChange={(e) => handleSliceScrub(Number(e.target.value))}
             aria-label="Scroll MRI slices"
@@ -979,6 +1160,25 @@ export function RealKneeMriViewer({
         </div>
 
         <div className="mri-footer-right">
+          <div className="segmented-pill mini-seg" role="group" aria-label="Left mouse tool">
+            <button
+              type="button"
+              className={`pill-btn ${mouseTool === 'scroll' ? 'active' : ''}`}
+              onClick={() => setMouseTool('scroll')}
+              title="Left-drag or mouse wheel scrolls slices (Shift+Drag pans)"
+            >
+              Scroll
+            </button>
+            <button
+              type="button"
+              className={`pill-btn ${mouseTool === 'pan' ? 'active' : ''}`}
+              onClick={() => setMouseTool('pan')}
+              title="Left-drag pans zoomed MRI (wheel still scrolls slices)"
+            >
+              Pan
+            </button>
+          </div>
+
           <div className="zoom-pill" role="group" aria-label="MRI zoom controls">
             <button
               type="button"

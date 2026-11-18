@@ -282,7 +282,7 @@ export function attachFresnelXrayShader(
           vec3 xN = normalize(normal);
           vec3 xV = normalize(vViewPosition);
           float fresnel = pow(1.0 - abs(dot(xN, xV)), 2.4);
-          diffuseColor.a = clamp(0.03 + 0.34 * fresnel, 0.03, 0.38);
+          diffuseColor.a = clamp(0.02 + 0.26 * fresnel, 0.02, 0.30);
           outgoingLight = mix(outgoingLight * 0.28, vec3(0.50, 0.68, 0.90), fresnel * 0.68);
         }
         #include <opaque_fragment>
@@ -423,7 +423,7 @@ function applyBoneXrayState(mat: THREE.MeshPhysicalMaterial, xray: boolean): boo
   const prev = mat.userData.xrayApplied;
   mat.side = xray ? THREE.FrontSide : THREE.DoubleSide;
   mat.transparent = xray;
-  mat.opacity = xray ? 0.24 : 1.0;
+  mat.opacity = xray ? 0.18 : 1.0;
   mat.depthWrite = !xray;
   mat.clearcoat = xray ? 0 : 0.06;
   mat.color.setHex(
@@ -431,6 +431,16 @@ function applyBoneXrayState(mat: THREE.MeshPhysicalMaterial, xray: boolean): boo
   );
   mat.userData.xrayApplied = xray;
   return prev !== xray;
+}
+
+function applyExtensorTendonState(mat: THREE.MeshPhysicalMaterial, ghosted: boolean): boolean {
+  const prev = mat.userData.ghostApplied;
+  mat.transparent = ghosted;
+  mat.opacity = ghosted ? 0.14 : 1.0;
+  mat.depthWrite = !ghosted;
+  mat.side = ghosted ? THREE.FrontSide : THREE.DoubleSide;
+  mat.userData.ghostApplied = ghosted;
+  return prev !== ghosted;
 }
 
 function applyCartilageState(
@@ -530,6 +540,11 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
       shaderDirty = applyCartilageState(mat, visibility.thicknessMap, visibility.xrayBones);
     } else if (EXTENSOR_NAMES.has(name)) {
       mesh.visible = structEnabled && (!enabledStructures ? visibility.extensor : true) && !plateauOnly;
+      const ghostExtensor =
+        visibility.xrayBones &&
+        chapterId !== 'patellar-dislocation' &&
+        activeStructure !== name;
+      shaderDirty = applyExtensorTendonState(mat, ghostExtensor);
     } else if (MENISCUS_NAMES.has(name)) {
       const groupAllowed = !enabledStructures ? visibility.menisci : true;
       if (name === 'MedialMeniscus') {
@@ -564,8 +579,8 @@ export function syncSpecimenMaterialsAndVisibility(params: SpecimenSyncParams): 
         shaderDirty = true;
       }
     } else if (isSelected) {
-      mat.emissive.setHex(0x38bdf8);
-      mat.emissiveIntensity = 0.28;
+      mat.emissive.setHex(0x0ea5e9);
+      mat.emissiveIntensity = 0.36;
       if (name === 'ACL' && mat.transparent) {
         mat.transparent = false;
         mat.opacity = 1.0;

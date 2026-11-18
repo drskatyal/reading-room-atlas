@@ -9,6 +9,7 @@ import {
   Tags,
 } from 'lucide-react';
 import { ANATOMY_SYSTEM_GROUPS, LAYER_GROUPS } from '../data/anatomyAndReportingData';
+import { STRUCTURES_INFO } from '../data/kneeClinicalAtlas';
 import type {
   AnatomyLandmarkItem,
   LayerSelectMode,
@@ -88,6 +89,8 @@ export function AnatomySidebar({
       onIsolateStructure(item.structureId);
     }
   };
+
+  const structInfo = STRUCTURES_INFO[activeStructure];
 
   return (
     <aside className="mode-sidebar" aria-label="3D and MRI anatomy outliner">
@@ -313,10 +316,20 @@ export function AnatomySidebar({
         </div>
       </div>
 
-      {/* Compact 2-line Active Landmark Pearl */}
+      {/* Compact 3-part Structure & MRI Inspector */}
       <div className="sidebar-active-note">
-        <div className="active-note-title">{activeLandmark.label}</div>
-        <div className="active-note-fact">{activeLandmark.keyFact}</div>
+        <div className="active-note-head">
+          <span className="active-note-title">{activeLandmark.label}</span>
+          {structInfo && <span className="active-note-group">{structInfo.group}</span>}
+        </div>
+        {structInfo && (
+          <div className="active-note-meta">
+            <strong>Attachments:</strong> {structInfo.attachmentSummary}
+          </div>
+        )}
+        <div className="active-note-fact">
+          <strong>3T MRI &amp; Pearl:</strong> {activeLandmark.keyFact}
+        </div>
       </div>
     </aside>
   );

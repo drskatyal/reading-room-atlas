@@ -120,6 +120,7 @@ export function App() {
     INITIAL_ANATOMY_LANDMARK.mriContrast
   );
   const [mriZoom, setMriZoom] = useState<number>(INITIAL_ANATOMY_LANDMARK.mriZoom);
+  const [mriFocusTrigger, setMriFocusTrigger] = useState(1);
 
   const [flexionDeg, setFlexionDeg] = useState<number>(6);
   const [patellaSubluxation, setPatellaSubluxation] = useState<number>(0);
@@ -153,6 +154,7 @@ export function App() {
         if (cancelled) return;
         setLandmarks(data);
         setMriSliceRas(data.jointCenterRas);
+        setMriFocusTrigger((t) => t + 1);
       })
       .catch(() => {
         // Fallback Right-knee landmarks exist inside viewer helpers
@@ -233,6 +235,7 @@ export function App() {
     setActiveStructure(item.structureId);
     setTargetRasOverride(item.targetRas);
     setTargetBadge(item.label);
+    setMriFocusTrigger((t) => t + 1);
     setEnabledStructures((prev) => {
       if (prev.has(item.structureId)) return prev;
       const next = new Set(prev);
@@ -285,6 +288,7 @@ export function App() {
     setActiveStructure(step.focusStructure);
     setTargetRasOverride(step.targetRasOverride);
     setTargetBadge(step.targetBadge);
+    setMriFocusTrigger((t) => t + 1);
   }, []);
 
   const applyQuizQuestion = useCallback((idx: number) => {
@@ -305,6 +309,7 @@ export function App() {
     setActiveStructure(q.targetStructure ?? 'ACL');
     setTargetRasOverride(q.targetRasOverride);
     setTargetBadge(q.targetBadge);
+    setMriFocusTrigger((t) => t + 1);
   }, []);
 
   const handleSelectPathologyModule = useCallback(
@@ -426,17 +431,18 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  const handleManualStructureSelect = useCallback(
+  const handleViewportStructurePick = useCallback(
     (id: StructureId) => {
+      setActiveStructure(id);
+      setTargetRasOverride(undefined);
+      setTargetBadge(undefined);
       if (workspaceMode === 'anatomy') {
-        applyAnatomyLandmark(findDefaultLandmarkForStructure(id));
-      } else {
-        setActiveStructure(id);
-        setTargetRasOverride(undefined);
-        setTargetBadge(undefined);
+        const item = findDefaultLandmarkForStructure(id);
+        setActiveLandmark(item);
+        setCustomMriAnnotations(undefined);
       }
     },
-    [workspaceMode, applyAnatomyLandmark]
+    [workspaceMode]
   );
 
   const handleQuizLocateClick = useCallback(
@@ -615,7 +621,7 @@ export function App() {
               setCameraTrigger((t) => t + 1);
             }}
             activeStructure={activeStructure}
-            onSelectStructure={handleManualStructureSelect}
+            onSelectStructure={handleViewportStructurePick}
             flexionDeg={flexionDeg}
             kinematics={kinematics}
             showAllLabels={showAllLabels}
@@ -641,6 +647,7 @@ export function App() {
               mriZoom={mriZoom}
               onMriZoomChange={setMriZoom}
               targetRasMm={targetRasMm}
+              focusTrigger={mriFocusTrigger}
               targetBadge={targetBadge}
               mriAnnotations={effectiveAnnotations}
               showTargetPointer={showTargetPointer}
@@ -653,7 +660,7 @@ export function App() {
               }
               hidden={isGuidePage || isFullScreen3D}
               onRasCrosshairChange={setMriSliceRas}
-              onSelectStructureFromMri={handleManualStructureSelect}
+              onSelectStructureFromMri={handleViewportStructurePick}
               onQuizMriClick={handleQuizLocateClick}
             />
           </div>

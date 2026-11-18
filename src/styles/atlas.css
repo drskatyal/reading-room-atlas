@@ -755,6 +755,18 @@ input:focus-visible {
   height: 100%;
 }
 
+.mri-canvas[data-tool='scroll'] {
+  cursor: ns-resize;
+}
+
+.mri-canvas[data-tool='pan'] {
+  cursor: grab;
+}
+
+.mri-canvas[data-tool='pan']:active {
+  cursor: grabbing;
+}
+
 .mri-overlay-container {
   position: absolute;
   inset: 0;
@@ -880,6 +892,8 @@ input:focus-visible {
 .footer-label {
   font-family: var(--font-mono);
   font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-muted);
 }
 
@@ -1681,10 +1695,35 @@ input:focus-visible {
   gap: 4px;
 }
 
+.active-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
 .active-note-title {
   font-size: 11.5px;
   font-weight: 700;
   color: var(--accent-telemetry);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-note-group {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.active-note-meta {
+  font-size: 11px;
+  line-height: 1.38;
+  color: var(--text-muted);
 }
 
 .active-note-fact {
