@@ -3408,6 +3408,68 @@ input:focus-visible {
   bottom: 8px;
 }
 
+.mri-callout-layer {
+  z-index: 6;
+}
+
+.mri-leader-line {
+  stroke: rgba(148, 163, 184, 0.72);
+  stroke-width: 1.25;
+}
+
+.mri-leader-line.is-active {
+  stroke: #38bdf8;
+  stroke-width: 1.75;
+}
+
+.mri-leader-line.is-case {
+  stroke: #fb7185;
+  stroke-width: 2;
+}
+
+.mri-anchor-dot {
+  fill: #e2e8f0;
+  stroke: #020617;
+  stroke-width: 1.2;
+}
+
+.mri-anchor-dot.is-active {
+  fill: #38bdf8;
+}
+
+.mri-anchor-dot.is-case {
+  fill: #fb7185;
+}
+
+.mri-anchor-ring-case {
+  fill: rgba(251, 113, 133, 0.22);
+  stroke: #fb7185;
+  stroke-width: 1.5;
+}
+
+.mri-pin-pill.side-left {
+  transform: translate(-100%, -50%);
+}
+
+.mri-pin-pill.side-right {
+  transform: translate(0, -50%);
+}
+
+.mri-pin-pill.is-active {
+  border-color: #38bdf8;
+  background: rgba(8, 47, 73, 0.92);
+  color: #e0f2fe;
+  font-weight: 600;
+}
+
+.mri-pin-pill.is-case-target {
+  border-color: #fb7185;
+  background: rgba(76, 5, 25, 0.92);
+  color: #ffe4e6;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(251, 113, 133, 0.32);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Layers, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react';
+import { Maximize2, Minus, Plus, RotateCcw, Tag } from 'lucide-react';
+import {
+  CLINICAL_MRI_LABELS,
+  findPinForStructure,
+  type ClinicalMriPin,
+} from '../data/clinicalMriLabels';
 import type {
   JointAtlasDefinition,
   MriContrastPreset,
   MriPlaneMode,
+  StructureId,
 } from '../types/atlas';
 
 export interface ClinicalSequenceMeta {
@@ -32,12 +38,41 @@ interface ClinicalStackMriViewerProps {
   jointDef: JointAtlasDefinition;
   planeMode: MriPlaneMode;
   contrastPreset: MriContrastPreset;
+  activeStructure: StructureId;
+  enabledStructures: Set<StructureId>;
+  showAllLabels: boolean;
+  onToggleAllLabels: () => void;
+  isPathologyMode: boolean;
+  targetBadge?: string;
+  hideLabels?: boolean;
   focusTrigger?: number;
   hidden?: boolean;
-  onSwitchTo3DSync: () => void;
+  onSelectStructure: (id: StructureId) => void;
 }
 
 type MouseTool = 'scroll' | 'wl' | 'pan';
+
+interface ImageViewportBox {
+  dx: number;
+  dy: number;
+  drawW: number;
+  drawH: number;
+  cssW: number;
+  cssH: number;
+}
+
+interface ProjectedMriLabel {
+  id: string;
+  structureId: StructureId;
+  text: string;
+  side: 'left' | 'right';
+  ax: number;
+  ay: number;
+  lx: number;
+  ly: number;
+  isCaseTarget: boolean;
+  isActive: boolean;
+}
 
 // Module-level cache of decompressed pixel stacks (pure uint8 pixel arrays, zero PHI)
 const sequenceDataCache = new Map<string, Uint8Array>();
@@ -67,7 +102,7 @@ async function fetchAndDecompressStack(url: string, expectedBytes: number): Prom
     throw new Error(`Unexpected sequence byte length (${pixels.length} < ${expectedBytes})`);
   }
 
-  // Keep cache bounded (~12 sequences max in RAM)
+  // Keep cache bounded (~14 sequences max in RAM)
   if (sequenceDataCache.size >= 14) {
     const firstKey = sequenceDataCache.keys().next().value;
     if (firstKey) sequenceDataCache.delete(firstKey);
@@ -113,13 +148,40 @@ function pickBestSequenceForContext(
   return t1Hit ?? pool[0];
 }
 
+function relaxColumn(items: ProjectedMriLabel[], minY: number, maxY: number, minGap = 24) {
+  items.sort((a, b) => a.ly - b.ly);
+  for (let i = 1; i < items.length; i++) {
+    if (items[i].ly - items[i - 1].ly < minGap) {
+      items[i].ly = items[i - 1].ly + minGap;
+    }
+  }
+  if (items.length > 0 && items[items.length - 1].ly > maxY) {
+    items[items.length - 1].ly = maxY;
+    for (let i = items.length - 2; i >= 0; i--) {
+      if (items[i + 1].ly - items[i].ly < minGap) {
+        items[i].ly = items[i + 1].ly - minGap;
+      }
+    }
+  }
+  for (const item of items) {
+    item.ly = Math.max(minY, Math.min(maxY, item.ly));
+  }
+}
+
 export function ClinicalStackMriViewer({
   jointDef,
   planeMode,
   contrastPreset,
+  activeStructure,
+  enabledStructures,
+  showAllLabels,
+  onToggleAllLabels,
+  isPathologyMode,
+  targetBadge,
+  hideLabels = false,
   focusTrigger = 0,
   hidden = false,
-  onSwitchTo3DSync,
+  onSelectStructure,
 }: ClinicalStackMriViewerProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -136,6 +198,7 @@ export function ClinicalStackMriViewer({
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [stackVersion, setStackVersion] = useState<number>(0);
+  const [imgBox, setImgBox] = useState<ImageViewportBox | null>(null);
 
   const pixelsRef = useRef<Uint8Array | null>(null);
   const seqRef = useRef<ClinicalSequenceMeta | null>(null);
@@ -164,8 +227,13 @@ export function ClinicalStackMriViewer({
         pickBestSequenceForContext(data.sequences, planeMode, contrastPreset) ??
         data.sequences[0];
       if (initial) {
+        const pinHit = findPinForStructure(jointDef.id, activeStructure, initial.plane);
+        const targetSlice =
+          pinHit && pinHit.plane === initial.plane
+            ? Math.max(0, Math.min(initial.slices - 1, Math.round(pinHit.pin.sliceFrac * (initial.slices - 1))))
+            : initial.defaultSlice;
         setActiveSeqId(initial.id);
-        setSliceIndex(initial.defaultSlice);
+        setSliceIndex(targetSlice);
         setWinWidth(initial.defaultWindow);
         setWinLevel(initial.defaultLevel);
         setZoom(1.0);
@@ -200,25 +268,26 @@ export function ClinicalStackMriViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jointDef.id]);
 
-  // Auto-select matching sequence when user explicitly clicks a structure or pathology step
+  // Auto-select matching sequence + exact anatomical slice when user clicks a structure or pathology step
   useEffect(() => {
     if (!manifest || focusTrigger === lastFocusTriggerRef.current) return;
     lastFocusTriggerRef.current = focusTrigger;
     const best = pickBestSequenceForContext(manifest.sequences, planeMode, contrastPreset);
-    if (best && best.id !== activeSeqId) {
-      const prev = manifest.sequences.find((s) => s.id === activeSeqId);
-      const samePlane = prev && prev.plane === best.plane;
-      const frac = prev && prev.slices > 1 ? sliceIndex / (prev.slices - 1) : 0.5;
+    if (!best) return;
+
+    const pinHit = findPinForStructure(jointDef.id, activeStructure, best.plane);
+    const targetSlice =
+      pinHit && pinHit.plane === best.plane
+        ? Math.max(0, Math.min(best.slices - 1, Math.round(pinHit.pin.sliceFrac * (best.slices - 1))))
+        : best.defaultSlice;
+
+    if (best.id !== activeSeqId) {
       setActiveSeqId(best.id);
-      setSliceIndex(
-        samePlane
-          ? Math.max(0, Math.min(best.slices - 1, Math.round(frac * (best.slices - 1))))
-          : best.defaultSlice
-      );
       setWinWidth(best.defaultWindow);
       setWinLevel(best.defaultLevel);
     }
-  }, [focusTrigger, manifest, planeMode, contrastPreset, activeSeqId, sliceIndex]);
+    setSliceIndex(targetSlice);
+  }, [focusTrigger, manifest, planeMode, contrastPreset, activeStructure, jointDef.id, activeSeqId]);
 
   // Fetch active sequence pixel buffer + background-prefetch next sequence in same plane
   useEffect(() => {
@@ -272,7 +341,7 @@ export function ClinicalStackMriViewer({
     };
   }, [activeSeq, manifest]);
 
-  // Fast <1ms 2D canvas render with live W/L LUT + zoom/pan
+  // Fast <1ms 2D canvas render with live W/L LUT + zoom/pan + exact CSS image box tracking
   const renderSlice = useCallback(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
@@ -293,7 +362,6 @@ export function ClinicalStackMriViewer({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Offscreen slice canvas matching native matrix
     let off = offscreenRef.current;
     if (!off) {
       off = document.createElement('canvas');
@@ -310,7 +378,6 @@ export function ClinicalStackMriViewer({
     const sliceLen = seq.width * seq.height;
     const offset = sIdx * sliceLen;
 
-    // Precompute 256-entry Window/Level LUT
     const lut = new Uint8ClampedArray(256);
     const wMin = winLevel - winWidth / 2;
     const invW = 255 / Math.max(8, winWidth);
@@ -330,7 +397,6 @@ export function ClinicalStackMriViewer({
     }
     offCtx.putImageData(imgData, 0, 0);
 
-    // Draw into main viewport with physical aspect ratio + zoom + pan
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#04070d';
     ctx.fillRect(0, 0, targetW, targetH);
@@ -339,23 +405,37 @@ export function ClinicalStackMriViewer({
     const colSp = seq.pixelSpacingMm?.[1] || 1;
     const physW = seq.width * colSp;
     const physH = seq.height * rowSp;
-    const pad = 16 * dpr;
-    const fitScale = Math.min((targetW - pad * 2) / physW, (targetH - pad * 2) / physH);
-    const drawW = physW * fitScale * zoom;
-    const drawH = physH * fitScale * zoom;
-    const dx = (targetW - drawW) / 2 + pan.x * dpr;
-    const dy = (targetH - drawH) / 2 + pan.y * dpr;
+    const padCss = 16;
+    const fitScaleCss = Math.min((cssW - padCss * 2) / physW, (cssH - padCss * 2) / physH);
+    const drawWCss = physW * fitScaleCss * zoom;
+    const drawHCss = physH * fitScaleCss * zoom;
+    const dxCss = (cssW - drawWCss) / 2 + pan.x;
+    const dyCss = (cssH - drawHCss) / 2 + pan.y;
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(off, dx, dy, drawW, drawH);
+    ctx.drawImage(off, dxCss * dpr, dyCss * dpr, drawWCss * dpr, drawHCss * dpr);
+
+    setImgBox((prev) => {
+      if (
+        prev &&
+        Math.abs(prev.dx - dxCss) < 0.5 &&
+        Math.abs(prev.dy - dyCss) < 0.5 &&
+        Math.abs(prev.drawW - drawWCss) < 0.5 &&
+        Math.abs(prev.drawH - drawHCss) < 0.5 &&
+        Math.abs(prev.cssW - cssW) < 0.5 &&
+        Math.abs(prev.cssH - cssH) < 0.5
+      ) {
+        return prev;
+      }
+      return { dx: dxCss, dy: dyCss, drawW: drawWCss, drawH: drawHCss, cssW, cssH };
+    });
   }, [sliceIndex, winWidth, winLevel, zoom, pan, hidden]);
 
   useEffect(() => {
     renderSlice();
   }, [renderSlice, stackVersion]);
 
-  // ResizeObserver for crisp redraws on window/pane resize
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
@@ -363,6 +443,95 @@ export function ClinicalStackMriViewer({
     ro.observe(wrap);
     return () => ro.disconnect();
   }, [renderSlice]);
+
+  // Compute non-overlapping projected MRI anatomical + case pathology labels
+  const projectedLabels = useMemo<ProjectedMriLabel[]>(() => {
+    if (hideLabels || loading || errorMsg || !activeSeq || !imgBox) return [];
+    const planePins: ClinicalMriPin[] = CLINICAL_MRI_LABELS[jointDef.id]?.[activeSeq.plane] ?? [];
+    if (!planePins.length) return [];
+
+    const curFrac = activeSeq.slices > 1 ? sliceIndex / (activeSeq.slices - 1) : 0.5;
+    const visiblePins: Array<{ pin: ClinicalMriPin; isCaseTarget: boolean; isActive: boolean }> = [];
+
+    for (const pin of planePins) {
+      const isFocus = pin.structureId === activeStructure;
+      const onSlice = Math.abs(curFrac - pin.sliceFrac) <= pin.sliceSpan;
+      if (!onSlice) continue;
+
+      if (isPathologyMode) {
+        if (isFocus) {
+          visiblePins.push({ pin, isCaseTarget: true, isActive: true });
+        } else if (showAllLabels && enabledStructures.has(pin.structureId)) {
+          visiblePins.push({ pin, isCaseTarget: false, isActive: false });
+        }
+      } else {
+        if (showAllLabels) {
+          if (enabledStructures.has(pin.structureId)) {
+            visiblePins.push({ pin, isCaseTarget: false, isActive: isFocus });
+          }
+        } else if (isFocus && enabledStructures.has(pin.structureId)) {
+          visiblePins.push({ pin, isCaseTarget: false, isActive: true });
+        }
+      }
+    }
+
+    if (!visiblePins.length) return [];
+
+    const cx = imgBox.dx + imgBox.drawW / 2;
+    const leftCol: ProjectedMriLabel[] = [];
+    const rightCol: ProjectedMriLabel[] = [];
+
+    for (const { pin, isCaseTarget, isActive } of visiblePins) {
+      const ax = imgBox.dx + (pin.xPct / 100) * imgBox.drawW;
+      const ay = imgBox.dy + (pin.yPct / 100) * imgBox.drawH;
+      if (ax < -20 || ax > imgBox.cssW + 20 || ay < -20 || ay > imgBox.cssH + 20) continue;
+
+      const text = isCaseTarget && targetBadge ? targetBadge : pin.label;
+      const estWidth = Math.min(220, Math.max(54, text.length * 6.8 + 20));
+      const isLeft = ax < cx;
+      // Left pills are right-aligned at lx (transform: translate(-100%, -50%)) so leader hits right edge;
+      // Right pills are left-aligned at lx (transform: translate(0, -50%)) so leader hits left edge;
+      // Both are strictly clamped inside [10 .. cssW - 10] so long pathology badges never clip!
+      const lx = isLeft
+        ? Math.max(estWidth + 10, Math.min(ax - 22, imgBox.dx + Math.max(8, imgBox.drawW * 0.14)))
+        : Math.min(imgBox.cssW - estWidth - 10, Math.max(ax + 22, imgBox.dx + Math.min(imgBox.drawW - 8, imgBox.drawW * 0.86)));
+
+      const item: ProjectedMriLabel = {
+        id: `${activeSeq.plane}-${pin.structureId}`,
+        structureId: pin.structureId,
+        text,
+        side: isLeft ? 'left' : 'right',
+        ax,
+        ay,
+        lx,
+        ly: ay,
+        isCaseTarget,
+        isActive,
+      };
+      if (isLeft) leftCol.push(item);
+      else rightCol.push(item);
+    }
+
+    const minY = 34;
+    const maxY = Math.max(minY + 40, imgBox.cssH - 34);
+    relaxColumn(leftCol, minY, maxY, 24);
+    relaxColumn(rightCol, minY, maxY, 24);
+
+    return [...leftCol, ...rightCol];
+  }, [
+    hideLabels,
+    loading,
+    errorMsg,
+    activeSeq,
+    imgBox,
+    jointDef.id,
+    sliceIndex,
+    activeStructure,
+    isPathologyMode,
+    showAllLabels,
+    enabledStructures,
+    targetBadge,
+  ]);
 
   const handleSelectSequence = useCallback(
     (seq: ClinicalSequenceMeta) => {
@@ -392,7 +561,6 @@ export function ClinicalStackMriViewer({
     }
   }, [activeSeq]);
 
-  // Wheel slice scrolling (non-passive) + FlowRad pointer drag (Left=active tool, Right=W/L, Middle/Shift=Pan)
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
@@ -419,7 +587,6 @@ export function ClinicalStackMriViewer({
     return () => wrap.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Pointer drag state for Scroll / W-L / Pan
   const dragRef = useRef<{
     mode: MouseTool;
     lastX: number;
@@ -428,6 +595,7 @@ export function ClinicalStackMriViewer({
   } | null>(null);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
     let mode: MouseTool = mouseTool;
     if (e.button === 2) {
       mode = 'wl';
@@ -480,7 +648,6 @@ export function ClinicalStackMriViewer({
     }
   };
 
-  // Keyboard shortcuts when viewport is focused/hovered
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (!manifest) return;
     const maxS = Math.max(0, (activeSeq?.slices ?? 1) - 1);
@@ -519,24 +686,18 @@ export function ClinicalStackMriViewer({
           )}
         </div>
         <div className="pane-actions">
-          <div className="segmented-pill" role="group" aria-label="MRI Viewer Mode">
+          {!hideLabels && (
             <button
               type="button"
-              className="pill-btn active"
-              title="Real multi-sequence clinical MRI study"
+              className={`chip-btn ${showAllLabels ? 'active' : ''}`}
+              aria-pressed={showAllLabels}
+              onClick={onToggleAllLabels}
+              title="Toggle anatomical labels across 3D & MRI slices"
             >
-              Sequences
+              <Tag size={12} />
+              <span>{showAllLabels ? 'Labels On' : 'Labels'}</span>
             </button>
-            <button
-              type="button"
-              className="pill-btn"
-              onClick={onSwitchTo3DSync}
-              title="Switch to 3D-synced MPR volume & segmentation overlays"
-            >
-              <Layers size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
-              3D Sync
-            </button>
-          </div>
+          )}
         </div>
       </header>
 
@@ -563,7 +724,7 @@ export function ClinicalStackMriViewer({
         </div>
       )}
 
-      {/* Native Zero-Lag Canvas Viewport */}
+      {/* Native Zero-Lag Canvas Viewport + Anatomical / Case Pathology Labels */}
       <div
         ref={wrapRef}
         className={`mri-canvas-wrap clinical-canvas-wrap tool-${mouseTool}`}
@@ -576,6 +737,64 @@ export function ClinicalStackMriViewer({
         onKeyDown={onKeyDown}
       >
         <canvas ref={canvasRef} className="clinical-mri-canvas" />
+
+        {/* Synchronized On-MRI Anatomical & Pathology Callout Layer */}
+        {projectedLabels.length > 0 && imgBox && (
+          <div className="callout-layer mri-callout-layer" aria-label="MRI Anatomical Labels">
+            <svg
+              className="callout-svg"
+              viewBox={`0 0 ${imgBox.cssW} ${imgBox.cssH}`}
+              preserveAspectRatio="none"
+            >
+              {projectedLabels.map((lbl) => (
+                <g key={lbl.id}>
+                  <line
+                    x1={lbl.ax}
+                    y1={lbl.ay}
+                    x2={lbl.lx}
+                    y2={lbl.ly}
+                    className={`mri-leader-line ${
+                      lbl.isCaseTarget ? 'is-case' : lbl.isActive ? 'is-active' : ''
+                    }`}
+                  />
+                  {lbl.isCaseTarget && (
+                    <circle
+                      cx={lbl.ax}
+                      cy={lbl.ay}
+                      r={7}
+                      className="mri-anchor-ring-case"
+                    />
+                  )}
+                  <circle
+                    cx={lbl.ax}
+                    cy={lbl.ay}
+                    r={lbl.isCaseTarget ? 3.5 : 3}
+                    className={`mri-anchor-dot ${
+                      lbl.isCaseTarget ? 'is-case' : lbl.isActive ? 'is-active' : ''
+                    }`}
+                  />
+                </g>
+              ))}
+            </svg>
+
+            {projectedLabels.map((lbl) => (
+              <button
+                key={lbl.id}
+                type="button"
+                className={`pin-pill mri-pin-pill side-${lbl.side} ${
+                  lbl.isCaseTarget ? 'is-case-target' : lbl.isActive ? 'is-active' : ''
+                }`}
+                style={{ left: `${lbl.lx}px`, top: `${lbl.ly}px` }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectStructure(lbl.structureId);
+                }}
+              >
+                {lbl.text}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Clean technical-only HUD corners (ZERO patient data) */}
         {activeSeq && !errorMsg && (

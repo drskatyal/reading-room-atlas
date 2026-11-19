@@ -7,7 +7,6 @@ import { KneeSpecimen3D } from './components/KneeSpecimen3D';
 import { LandingHomePage } from './components/LandingHomePage';
 import { MriReportingGuidePage } from './components/MriReportingGuidePage';
 import { PathologySidebar } from './components/PathologySidebar';
-import { RealKneeMriViewer } from './components/RealKneeMriViewer';
 import { TopModuleBar } from './components/TopModuleBar';
 import { computeKneeKinematics } from './core/coordinates';
 import { buildRoute, parseRoute } from './core/routing';
@@ -22,7 +21,6 @@ import type {
   KneeModule,
   LayerSelectMode,
   ModuleId,
-  MriAnnotation,
   MriContrastPreset,
   MriOverlayMode,
   MriPlaneMode,
@@ -135,9 +133,6 @@ export function App() {
   const [layerMode, setLayerMode] = useState<LayerSelectMode>('multiple');
 
   const [activeLandmark, setActiveLandmark] = useState<AnatomyLandmarkItem>(initialLandmark);
-  const [customMriAnnotations, setCustomMriAnnotations] = useState<MriAnnotation[] | undefined>(
-    initialStep ? undefined : initialLandmark.mriAnnotations
-  );
   const [mriOverlayMode, setMriOverlayMode] = useState<MriOverlayMode>('none');
   const [activeDemoPresetId, setActiveDemoPresetId] = useState<string>(
     initialJointDef.patientDemoPresets[0]?.id ?? ''
@@ -161,9 +156,6 @@ export function App() {
   const [mriContrast, setMriContrast] = useState<MriContrastPreset>(
     initialStep?.mriContrast ?? initialLandmark.mriContrast
   );
-  const [mriZoom, setMriZoom] = useState<number>(
-    initialStep?.mriZoom ?? initialLandmark.mriZoom
-  );
   const [mriFocusTrigger, setMriFocusTrigger] = useState(1);
 
   const [flexionDeg, setFlexionDeg] = useState<number>(
@@ -186,10 +178,8 @@ export function App() {
     initialJointDef.defaultMriSliceRas
   );
 
-  const [showTargetPointer, setShowTargetPointer] = useState(true);
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [showSlicePlane, setShowSlicePlane] = useState(false);
-  const [mriViewMode, setMriViewMode] = useState<'clinical' | 'mpr3d'>('clinical');
 
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -293,7 +283,6 @@ export function App() {
   const applyAnatomyLandmark = useCallback(
     (item: AnatomyLandmarkItem, targetDef: JointAtlasDefinition = jointDef) => {
       setActiveLandmark(item);
-      setCustomMriAnnotations(item.mriAnnotations);
       setModuleId(targetDef.modules[0].id);
       setSubStepIndex(0);
       setViewMode(item.viewMode3D);
@@ -302,7 +291,6 @@ export function App() {
       setCameraTrigger((t) => t + 1);
       setMriPlane(item.mriPlane);
       setMriContrast(item.mriContrast);
-      setMriZoom(item.mriZoom);
       setFlexionDeg(targetDef.kinematicConfig.defaultDeg);
       setPatellaSubluxation(0);
       setActiveStructure(item.structureId);
@@ -348,7 +336,6 @@ export function App() {
   const applySubStep = useCallback((mod: KneeModule, nextIdx: number) => {
     const safeIdx = Math.max(0, Math.min(mod.subSteps.length - 1, nextIdx));
     const step = mod.subSteps[safeIdx];
-    setCustomMriAnnotations(undefined);
     setModuleId(mod.id);
     setSubStepIndex(safeIdx);
     setViewMode(step.viewMode3D);
@@ -357,7 +344,6 @@ export function App() {
     setCameraTrigger((t) => t + 1);
     setMriPlane(step.mriPlane);
     setMriContrast(step.mriContrast);
-    setMriZoom(step.mriZoom);
     setFlexionDeg(step.flexionDeg);
     setPatellaSubluxation(step.patellaSubluxation ?? 0);
     setActiveStructure(step.focusStructure);
@@ -372,7 +358,6 @@ export function App() {
       const safeIdx = Math.max(0, Math.min(questions.length - 1, idx));
       const q = questions[safeIdx];
       const fallbackStruct = Object.keys(targetDef.structuresInfo)[0] ?? 'Femur';
-      setCustomMriAnnotations(undefined);
       setQuizIndex(safeIdx);
       setModuleId(q.moduleId);
       setViewMode(q.viewMode3D);
@@ -381,7 +366,6 @@ export function App() {
       setCameraTrigger((t) => t + 1);
       setMriPlane(q.mriPlane);
       setMriContrast(q.mriContrast);
-      setMriZoom(q.mriZoom);
       setFlexionDeg(q.flexionDeg);
       setPatellaSubluxation(q.patellaSubluxation ?? 0);
       setActiveStructure(q.targetStructure ?? fallbackStruct);
@@ -559,10 +543,8 @@ export function App() {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       const key = e.key.toLowerCase();
-      if (key === 'l') {
+      if (key === 'l' || key === 'h') {
         setShowAllLabels((v) => !v);
-      } else if (key === 'h') {
-        setShowTargetPointer((v) => !v);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -577,7 +559,6 @@ export function App() {
       if (workspaceMode === 'anatomy') {
         const item = findDefaultLandmarkForStructure(jointDef, id);
         setActiveLandmark(item);
-        setCustomMriAnnotations(undefined);
       }
     },
     [workspaceMode, jointDef]
@@ -606,26 +587,12 @@ export function App() {
     [activeQuiz]
   );
 
-  const targetRasMm = useMemo<[number, number, number] | null>(() => {
-    if (targetRasOverride) return targetRasOverride;
-    const s = landmarks?.structures[activeStructure];
-    if (s) return s.centroidRas;
-    return landmarks?.jointCenterRas ?? jointDef.defaultMriSliceRas;
-  }, [targetRasOverride, landmarks, activeStructure, jointDef.defaultMriSliceRas]);
-
   const effectiveModuleId = workspaceMode === 'quiz' ? activeQuiz.moduleId : activeModule.id;
   const effectiveSubStepId = workspaceMode === 'quiz' ? activeQuiz.id : activeSubStep.id;
   const effectiveTearMorphology =
     workspaceMode === 'quiz'
       ? activeQuiz.meniscalTearMorphology
       : activeSubStep.meniscalTearMorphology;
-  const effectiveAnnotations = useMemo(
-    () =>
-      workspaceMode === 'quiz'
-        ? activeQuiz.mriAnnotations ?? []
-        : customMriAnnotations ?? activeSubStep.mriAnnotations ?? [],
-    [workspaceMode, activeQuiz.mriAnnotations, customMriAnnotations, activeSubStep.mriAnnotations]
-  );
 
   const kinematics = useMemo(
     () =>
@@ -650,15 +617,6 @@ export function App() {
       jointDef.kinematicConfig.maxDeg,
     ]
   );
-
-  const quizCandidateStructures = useMemo<StructureId[] | undefined>(() => {
-    if (workspaceMode !== 'quiz' || activeQuiz.kind !== 'locate') return undefined;
-    const ids = activeQuiz.options.map((o) => o.id) as StructureId[];
-    if (jointId === 'knee' && activeQuiz.targetStructure === 'Fibula' && !ids.includes('LCL')) {
-      return [...ids, 'LCL'];
-    }
-    return ids;
-  }, [workspaceMode, activeQuiz, jointId]);
 
   const isLanding = workspaceMode === 'landing';
   const isGuidePage = workspaceMode === 'report-guide';
@@ -801,44 +759,21 @@ export function App() {
           />
 
           <div className={`mri-pane-slot ${isFullScreen3D ? 'is-hidden' : ''}`}>
-            {mriViewMode === 'clinical' ? (
-              <ClinicalStackMriViewer
-                jointDef={jointDef}
-                planeMode={mriPlane}
-                contrastPreset={mriContrast}
-                focusTrigger={mriFocusTrigger}
-                hidden={isWorkstationHidden || isFullScreen3D}
-                onSwitchTo3DSync={() => setMriViewMode('mpr3d')}
-              />
-            ) : (
-              <RealKneeMriViewer
-                jointDef={jointDef}
-                landmarks={landmarks}
-                contrastPreset={mriContrast}
-                onContrastChange={setMriContrast}
-                planeMode={mriPlane}
-                onPlaneModeChange={setMriPlane}
-                mriZoom={mriZoom}
-                onMriZoomChange={setMriZoom}
-                targetRasMm={targetRasMm}
-                focusTrigger={mriFocusTrigger}
-                targetBadge={targetBadge}
-                mriAnnotations={effectiveAnnotations}
-                showTargetPointer={showTargetPointer}
-                onToggleTargetPointer={() => setShowTargetPointer((v) => !v)}
-                hideTargetForQuiz={quizHideTarget}
-                quizCandidateStructures={quizCandidateStructures}
-                overlayModeProp={workspaceMode === 'anatomy' ? mriOverlayMode : undefined}
-                onOverlayModeChange={
-                  workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
-                }
-                hidden={isWorkstationHidden || isFullScreen3D}
-                onRasCrosshairChange={setMriSliceRas}
-                onSelectStructureFromMri={handleViewportStructurePick}
-                onQuizMriClick={handleQuizLocateClick}
-                onSwitchToClinical={() => setMriViewMode('clinical')}
-              />
-            )}
+            <ClinicalStackMriViewer
+              jointDef={jointDef}
+              planeMode={mriPlane}
+              contrastPreset={mriContrast}
+              activeStructure={activeStructure}
+              enabledStructures={enabledStructures}
+              showAllLabels={showAllLabels}
+              onToggleAllLabels={() => setShowAllLabels((v) => !v)}
+              isPathologyMode={workspaceMode === 'pathology'}
+              targetBadge={targetBadge}
+              hideLabels={quizHideTarget}
+              focusTrigger={mriFocusTrigger}
+              hidden={isWorkstationHidden || isFullScreen3D}
+              onSelectStructure={handleViewportStructurePick}
+            />
           </div>
 
           {isFullScreen3D && (
