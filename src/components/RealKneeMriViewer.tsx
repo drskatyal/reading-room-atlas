@@ -55,6 +55,7 @@ interface RealKneeMriViewerProps {
   onRasCrosshairChange: (mm: [number, number, number]) => void;
   onSelectStructureFromMri: (id: StructureId) => void;
   onQuizMriClick?: (id: StructureId) => void;
+  onSwitchToClinical?: () => void;
 }
 
 const SUBREGION_COLORMAP = {
@@ -213,6 +214,7 @@ export function RealKneeMriViewer({
   onRasCrosshairChange,
   onSelectStructureFromMri,
   onQuizMriClick,
+  onSwitchToClinical,
 }: RealKneeMriViewerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1101,6 +1103,16 @@ export function RealKneeMriViewer({
         <div className="pane-title-group">
           <span className="pane-title">{jointDef.mriSliceTitle}</span>
           <span className="pane-badge">{presetMeta.shortLabel}</span>
+          {onSwitchToClinical && (
+            <button
+              type="button"
+              className="chip-btn"
+              onClick={onSwitchToClinical}
+              title="Switch to Multi-Sequence Clinical MRI Study"
+            >
+              <span>Sequences</span>
+            </button>
+          )}
         </div>
 
         <div className="pane-actions">

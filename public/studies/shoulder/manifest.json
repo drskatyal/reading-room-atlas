@@ -1,0 +1,96 @@
+{
+  "jointId": "shoulder",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "cor-pdfs",
+      "label": "Cor PD-FS",
+      "plane": "coronal",
+      "weighting": "PD-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 25,
+      "sliceThicknessMm": 3.5,
+      "pixelSpacingMm": [
+        0.334,
+        0.334
+      ],
+      "defaultWindow": 214,
+      "defaultLevel": 107,
+      "defaultSlice": 12,
+      "file": "/studies/shoulder/cor-pdfs.bin.gz"
+    },
+    {
+      "id": "cor-t2fs",
+      "label": "Cor T2-FS",
+      "plane": "coronal",
+      "weighting": "T2-FS",
+      "width": 320,
+      "height": 320,
+      "slices": 25,
+      "sliceThicknessMm": 3.5,
+      "pixelSpacingMm": [
+        0.469,
+        0.469
+      ],
+      "defaultWindow": 176,
+      "defaultLevel": 88,
+      "defaultSlice": 12,
+      "file": "/studies/shoulder/cor-t2fs.bin.gz"
+    },
+    {
+      "id": "ax-pdfs",
+      "label": "Ax PD-FS",
+      "plane": "axial",
+      "weighting": "PD-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 28,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.339,
+        0.339
+      ],
+      "defaultWindow": 212,
+      "defaultLevel": 106,
+      "defaultSlice": 14,
+      "file": "/studies/shoulder/ax-pdfs.bin.gz"
+    },
+    {
+      "id": "sag-pdfs",
+      "label": "Sag PD-FS",
+      "plane": "sagittal",
+      "weighting": "PD-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 28,
+      "sliceThicknessMm": 3.5,
+      "pixelSpacingMm": [
+        0.334,
+        0.334
+      ],
+      "defaultWindow": 207,
+      "defaultLevel": 104,
+      "defaultSlice": 14,
+      "file": "/studies/shoulder/sag-pdfs.bin.gz"
+    },
+    {
+      "id": "sag-t1",
+      "label": "Sag T1",
+      "plane": "sagittal",
+      "weighting": "T1",
+      "width": 448,
+      "height": 448,
+      "slices": 28,
+      "sliceThicknessMm": 3.5,
+      "pixelSpacingMm": [
+        0.335,
+        0.335
+      ],
+      "defaultWindow": 236,
+      "defaultLevel": 118,
+      "defaultSlice": 14,
+      "file": "/studies/shoulder/sag-t1.bin.gz"
+    }
+  ]
+}

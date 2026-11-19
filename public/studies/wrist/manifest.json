@@ -1,0 +1,132 @@
+{
+  "jointId": "wrist",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "cor-t1",
+      "label": "Cor T1",
+      "plane": "coronal",
+      "weighting": "T1",
+      "width": 448,
+      "height": 448,
+      "slices": 15,
+      "sliceThicknessMm": 2.5,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 233,
+      "defaultLevel": 116,
+      "defaultSlice": 7,
+      "file": "/studies/wrist/cor-t1.bin.gz"
+    },
+    {
+      "id": "cor-stir",
+      "label": "Cor STIR",
+      "plane": "coronal",
+      "weighting": "STIR",
+      "width": 448,
+      "height": 448,
+      "slices": 15,
+      "sliceThicknessMm": 2.5,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 181,
+      "defaultLevel": 90,
+      "defaultSlice": 7,
+      "file": "/studies/wrist/cor-stir.bin.gz"
+    },
+    {
+      "id": "cor-3dge",
+      "label": "Cor 3D GE",
+      "plane": "coronal",
+      "weighting": "GRE",
+      "width": 448,
+      "height": 448,
+      "slices": 40,
+      "sliceThicknessMm": 2.5,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 213,
+      "defaultLevel": 106,
+      "defaultSlice": 20,
+      "file": "/studies/wrist/cor-3dge.bin.gz"
+    },
+    {
+      "id": "ax-pdfs",
+      "label": "Ax PD-FS",
+      "plane": "axial",
+      "weighting": "PD-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 22,
+      "sliceThicknessMm": 2.5,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 206,
+      "defaultLevel": 103,
+      "defaultSlice": 11,
+      "file": "/studies/wrist/ax-pdfs.bin.gz"
+    },
+    {
+      "id": "ax-t2fs",
+      "label": "Ax T2-FS",
+      "plane": "axial",
+      "weighting": "T2-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 22,
+      "sliceThicknessMm": 2.5,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 211,
+      "defaultLevel": 106,
+      "defaultSlice": 11,
+      "file": "/studies/wrist/ax-t2fs.bin.gz"
+    },
+    {
+      "id": "sag-t1",
+      "label": "Sag T1",
+      "plane": "sagittal",
+      "weighting": "T1",
+      "width": 448,
+      "height": 448,
+      "slices": 17,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.223,
+        0.223
+      ],
+      "defaultWindow": 231,
+      "defaultLevel": 116,
+      "defaultSlice": 8,
+      "file": "/studies/wrist/sag-t1.bin.gz"
+    },
+    {
+      "id": "sag-t2",
+      "label": "Sag T2",
+      "plane": "sagittal",
+      "weighting": "T2",
+      "width": 384,
+      "height": 384,
+      "slices": 17,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.26,
+        0.26
+      ],
+      "defaultWindow": 227,
+      "defaultLevel": 114,
+      "defaultSlice": 8,
+      "file": "/studies/wrist/sag-t2.bin.gz"
+    }
+  ]
+}

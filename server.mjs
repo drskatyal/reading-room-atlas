@@ -19,7 +19,7 @@ app.use(
   express.static(distDir, {
     maxAge: '1y',
     setHeaders(res, filePath) {
-      if (filePath.endsWith('.nii.gz')) {
+      if (filePath.endsWith('.nii.gz') || filePath.endsWith('.bin.gz')) {
         res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
         res.removeHeader('Content-Encoding');

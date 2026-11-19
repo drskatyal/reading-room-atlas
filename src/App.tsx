@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnatomySidebar } from './components/AnatomySidebar';
+import { ClinicalStackMriViewer } from './components/ClinicalStackMriViewer';
 import { EditorialGuidePanel } from './components/EditorialGuidePanel';
 import { FullScreen3DOverlay } from './components/FullScreen3DView';
 import { KneeSpecimen3D } from './components/KneeSpecimen3D';
@@ -188,6 +189,7 @@ export function App() {
   const [showTargetPointer, setShowTargetPointer] = useState(true);
   const [showAllLabels, setShowAllLabels] = useState(false);
   const [showSlicePlane, setShowSlicePlane] = useState(false);
+  const [mriViewMode, setMriViewMode] = useState<'clinical' | 'mpr3d'>('clinical');
 
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
@@ -799,32 +801,44 @@ export function App() {
           />
 
           <div className={`mri-pane-slot ${isFullScreen3D ? 'is-hidden' : ''}`}>
-            <RealKneeMriViewer
-              jointDef={jointDef}
-              landmarks={landmarks}
-              contrastPreset={mriContrast}
-              onContrastChange={setMriContrast}
-              planeMode={mriPlane}
-              onPlaneModeChange={setMriPlane}
-              mriZoom={mriZoom}
-              onMriZoomChange={setMriZoom}
-              targetRasMm={targetRasMm}
-              focusTrigger={mriFocusTrigger}
-              targetBadge={targetBadge}
-              mriAnnotations={effectiveAnnotations}
-              showTargetPointer={showTargetPointer}
-              onToggleTargetPointer={() => setShowTargetPointer((v) => !v)}
-              hideTargetForQuiz={quizHideTarget}
-              quizCandidateStructures={quizCandidateStructures}
-              overlayModeProp={workspaceMode === 'anatomy' ? mriOverlayMode : undefined}
-              onOverlayModeChange={
-                workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
-              }
-              hidden={isWorkstationHidden || isFullScreen3D}
-              onRasCrosshairChange={setMriSliceRas}
-              onSelectStructureFromMri={handleViewportStructurePick}
-              onQuizMriClick={handleQuizLocateClick}
-            />
+            {mriViewMode === 'clinical' ? (
+              <ClinicalStackMriViewer
+                jointDef={jointDef}
+                planeMode={mriPlane}
+                contrastPreset={mriContrast}
+                focusTrigger={mriFocusTrigger}
+                hidden={isWorkstationHidden || isFullScreen3D}
+                onSwitchTo3DSync={() => setMriViewMode('mpr3d')}
+              />
+            ) : (
+              <RealKneeMriViewer
+                jointDef={jointDef}
+                landmarks={landmarks}
+                contrastPreset={mriContrast}
+                onContrastChange={setMriContrast}
+                planeMode={mriPlane}
+                onPlaneModeChange={setMriPlane}
+                mriZoom={mriZoom}
+                onMriZoomChange={setMriZoom}
+                targetRasMm={targetRasMm}
+                focusTrigger={mriFocusTrigger}
+                targetBadge={targetBadge}
+                mriAnnotations={effectiveAnnotations}
+                showTargetPointer={showTargetPointer}
+                onToggleTargetPointer={() => setShowTargetPointer((v) => !v)}
+                hideTargetForQuiz={quizHideTarget}
+                quizCandidateStructures={quizCandidateStructures}
+                overlayModeProp={workspaceMode === 'anatomy' ? mriOverlayMode : undefined}
+                onOverlayModeChange={
+                  workspaceMode === 'anatomy' ? setMriOverlayMode : undefined
+                }
+                hidden={isWorkstationHidden || isFullScreen3D}
+                onRasCrosshairChange={setMriSliceRas}
+                onSelectStructureFromMri={handleViewportStructurePick}
+                onQuizMriClick={handleQuizLocateClick}
+                onSwitchToClinical={() => setMriViewMode('clinical')}
+              />
+            )}
           </div>
 
           {isFullScreen3D && (

@@ -1,0 +1,114 @@
+{
+  "jointId": "elbow",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "cor-t1",
+      "label": "Cor T1",
+      "plane": "coronal",
+      "weighting": "T1",
+      "width": 250,
+      "height": 448,
+      "slices": 23,
+      "sliceThicknessMm": 6.0,
+      "pixelSpacingMm": [
+        1.006,
+        1.006
+      ],
+      "defaultWindow": 220,
+      "defaultLevel": 110,
+      "defaultSlice": 11,
+      "file": "/studies/elbow/cor-t1.bin.gz"
+    },
+    {
+      "id": "cor-stir",
+      "label": "Cor STIR",
+      "plane": "coronal",
+      "weighting": "STIR",
+      "width": 250,
+      "height": 448,
+      "slices": 23,
+      "sliceThicknessMm": 6.0,
+      "pixelSpacingMm": [
+        1.01,
+        1.01
+      ],
+      "defaultWindow": 171,
+      "defaultLevel": 86,
+      "defaultSlice": 11,
+      "file": "/studies/elbow/cor-stir.bin.gz"
+    },
+    {
+      "id": "sag-t1",
+      "label": "Sag T1",
+      "plane": "sagittal",
+      "weighting": "T1",
+      "width": 240,
+      "height": 448,
+      "slices": 25,
+      "sliceThicknessMm": 6.0,
+      "pixelSpacingMm": [
+        1.04,
+        1.04
+      ],
+      "defaultWindow": 221,
+      "defaultLevel": 110,
+      "defaultSlice": 12,
+      "file": "/studies/elbow/sag-t1.bin.gz"
+    },
+    {
+      "id": "sag-stir",
+      "label": "Sag STIR",
+      "plane": "sagittal",
+      "weighting": "STIR",
+      "width": 241,
+      "height": 448,
+      "slices": 25,
+      "sliceThicknessMm": 6.0,
+      "pixelSpacingMm": [
+        1.038,
+        1.038
+      ],
+      "defaultWindow": 191,
+      "defaultLevel": 96,
+      "defaultSlice": 12,
+      "file": "/studies/elbow/sag-stir.bin.gz"
+    },
+    {
+      "id": "ax-t2fs",
+      "label": "Ax T2-FS",
+      "plane": "axial",
+      "weighting": "T2-FS",
+      "width": 256,
+      "height": 256,
+      "slices": 11,
+      "sliceThicknessMm": 5.0,
+      "pixelSpacingMm": [
+        0.781,
+        0.781
+      ],
+      "defaultWindow": 144,
+      "defaultLevel": 72,
+      "defaultSlice": 5,
+      "file": "/studies/elbow/ax-t2fs.bin.gz"
+    },
+    {
+      "id": "ax-t2",
+      "label": "Ax T2 Dixon",
+      "plane": "axial",
+      "weighting": "T2",
+      "width": 256,
+      "height": 256,
+      "slices": 12,
+      "sliceThicknessMm": 5.0,
+      "pixelSpacingMm": [
+        0.781,
+        0.781
+      ],
+      "defaultWindow": 194,
+      "defaultLevel": 97,
+      "defaultSlice": 6,
+      "file": "/studies/elbow/ax-t2.bin.gz"
+    }
+  ]
+}

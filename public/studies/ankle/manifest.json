@@ -1,0 +1,132 @@
+{
+  "jointId": "ankle",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "cor-t1",
+      "label": "Cor T1",
+      "plane": "coronal",
+      "weighting": "T1",
+      "width": 448,
+      "height": 448,
+      "slices": 30,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.603,
+        0.603
+      ],
+      "defaultWindow": 251,
+      "defaultLevel": 126,
+      "defaultSlice": 15,
+      "file": "/studies/ankle/cor-t1.bin.gz"
+    },
+    {
+      "id": "cor-stir",
+      "label": "Cor STIR",
+      "plane": "coronal",
+      "weighting": "STIR",
+      "width": 384,
+      "height": 384,
+      "slices": 30,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.703,
+        0.703
+      ],
+      "defaultWindow": 213,
+      "defaultLevel": 106,
+      "defaultSlice": 15,
+      "file": "/studies/ankle/cor-stir.bin.gz"
+    },
+    {
+      "id": "sag-t1",
+      "label": "Sag T1",
+      "plane": "sagittal",
+      "weighting": "T1",
+      "width": 336,
+      "height": 448,
+      "slices": 30,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.558,
+        0.558
+      ],
+      "defaultWindow": 235,
+      "defaultLevel": 118,
+      "defaultSlice": 15,
+      "file": "/studies/ankle/sag-t1.bin.gz"
+    },
+    {
+      "id": "sag-stir",
+      "label": "Sag STIR",
+      "plane": "sagittal",
+      "weighting": "STIR",
+      "width": 288,
+      "height": 384,
+      "slices": 30,
+      "sliceThicknessMm": 3.0,
+      "pixelSpacingMm": [
+        0.651,
+        0.651
+      ],
+      "defaultWindow": 191,
+      "defaultLevel": 96,
+      "defaultSlice": 15,
+      "file": "/studies/ankle/sag-stir.bin.gz"
+    },
+    {
+      "id": "ax-pdfs",
+      "label": "Ax PD-FS",
+      "plane": "axial",
+      "weighting": "PD-FS",
+      "width": 320,
+      "height": 340,
+      "slices": 50,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.406,
+        0.406
+      ],
+      "defaultWindow": 210,
+      "defaultLevel": 105,
+      "defaultSlice": 25,
+      "file": "/studies/ankle/ax-pdfs.bin.gz"
+    },
+    {
+      "id": "ax-t2fs",
+      "label": "Ax T2-FS",
+      "plane": "axial",
+      "weighting": "T2-FS",
+      "width": 320,
+      "height": 320,
+      "slices": 50,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.469,
+        0.469
+      ],
+      "defaultWindow": 214,
+      "defaultLevel": 107,
+      "defaultSlice": 25,
+      "file": "/studies/ankle/ax-t2fs.bin.gz"
+    },
+    {
+      "id": "ax-t1",
+      "label": "Ax T1",
+      "plane": "axial",
+      "weighting": "T1",
+      "width": 320,
+      "height": 320,
+      "slices": 50,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.406,
+        0.406
+      ],
+      "defaultWindow": 236,
+      "defaultLevel": 118,
+      "defaultSlice": 25,
+      "file": "/studies/ankle/ax-t1.bin.gz"
+    }
+  ]
+}

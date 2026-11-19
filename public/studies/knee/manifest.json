@@ -1,0 +1,132 @@
+{
+  "jointId": "knee",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "sag-pdfs",
+      "label": "Sag PD-FS",
+      "plane": "sagittal",
+      "weighting": "PD-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 30,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.357,
+        0.357
+      ],
+      "defaultWindow": 174,
+      "defaultLevel": 88,
+      "defaultSlice": 15,
+      "file": "/studies/knee/sag-pdfs.bin.gz"
+    },
+    {
+      "id": "sag-pd",
+      "label": "Sag PD",
+      "plane": "sagittal",
+      "weighting": "PD",
+      "width": 448,
+      "height": 448,
+      "slices": 30,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.357,
+        0.357
+      ],
+      "defaultWindow": 249,
+      "defaultLevel": 126,
+      "defaultSlice": 15,
+      "file": "/studies/knee/sag-pd.bin.gz"
+    },
+    {
+      "id": "cor-t2fs",
+      "label": "Cor T2-FS",
+      "plane": "coronal",
+      "weighting": "T2-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 24,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.357,
+        0.357
+      ],
+      "defaultWindow": 174,
+      "defaultLevel": 90,
+      "defaultSlice": 12,
+      "file": "/studies/knee/cor-t2fs.bin.gz"
+    },
+    {
+      "id": "cor-t1",
+      "label": "Cor T1",
+      "plane": "coronal",
+      "weighting": "T1",
+      "width": 448,
+      "height": 448,
+      "slices": 24,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.357,
+        0.357
+      ],
+      "defaultWindow": 249,
+      "defaultLevel": 126,
+      "defaultSlice": 12,
+      "file": "/studies/knee/cor-t1.bin.gz"
+    },
+    {
+      "id": "cor-t2",
+      "label": "Cor T2",
+      "plane": "coronal",
+      "weighting": "T2",
+      "width": 448,
+      "height": 448,
+      "slices": 24,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.357,
+        0.357
+      ],
+      "defaultWindow": 246,
+      "defaultLevel": 124,
+      "defaultSlice": 12,
+      "file": "/studies/knee/cor-t2.bin.gz"
+    },
+    {
+      "id": "cor-acl",
+      "label": "Cor T2 ACL",
+      "plane": "coronal",
+      "weighting": "T2",
+      "width": 448,
+      "height": 448,
+      "slices": 15,
+      "sliceThicknessMm": 2.0,
+      "pixelSpacingMm": [
+        0.379,
+        0.379
+      ],
+      "defaultWindow": 245,
+      "defaultLevel": 124,
+      "defaultSlice": 7,
+      "file": "/studies/knee/cor-acl.bin.gz"
+    },
+    {
+      "id": "ax-t2fs",
+      "label": "Ax T2-FS",
+      "plane": "axial",
+      "weighting": "T2-FS",
+      "width": 448,
+      "height": 448,
+      "slices": 30,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        0.335,
+        0.335
+      ],
+      "defaultWindow": 169,
+      "defaultLevel": 84,
+      "defaultSlice": 15,
+      "file": "/studies/knee/ax-t2fs.bin.gz"
+    }
+  ]
+}

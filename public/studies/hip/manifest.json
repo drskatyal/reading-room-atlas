@@ -1,0 +1,96 @@
+{
+  "jointId": "hip",
+  "modality": "MRI",
+  "sequences": [
+    {
+      "id": "cor-t1",
+      "label": "Cor T1",
+      "plane": "coronal",
+      "weighting": "T1",
+      "width": 256,
+      "height": 180,
+      "slices": 24,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        1.523,
+        1.523
+      ],
+      "defaultWindow": 223,
+      "defaultLevel": 112,
+      "defaultSlice": 12,
+      "file": "/studies/hip/cor-t1.bin.gz"
+    },
+    {
+      "id": "cor-stir",
+      "label": "Cor STIR",
+      "plane": "coronal",
+      "weighting": "STIR",
+      "width": 320,
+      "height": 224,
+      "slices": 24,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        1.219,
+        1.219
+      ],
+      "defaultWindow": 205,
+      "defaultLevel": 102,
+      "defaultSlice": 12,
+      "file": "/studies/hip/cor-stir.bin.gz"
+    },
+    {
+      "id": "ax-t1",
+      "label": "Ax T1",
+      "plane": "axial",
+      "weighting": "T1",
+      "width": 256,
+      "height": 224,
+      "slices": 36,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        1.484,
+        1.484
+      ],
+      "defaultWindow": 231,
+      "defaultLevel": 116,
+      "defaultSlice": 18,
+      "file": "/studies/hip/ax-t1.bin.gz"
+    },
+    {
+      "id": "ax-t2fs",
+      "label": "Ax T2-FS",
+      "plane": "axial",
+      "weighting": "T2-FS",
+      "width": 256,
+      "height": 224,
+      "slices": 36,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        1.484,
+        1.484
+      ],
+      "defaultWindow": 208,
+      "defaultLevel": 104,
+      "defaultSlice": 18,
+      "file": "/studies/hip/ax-t2fs.bin.gz"
+    },
+    {
+      "id": "sag-t1",
+      "label": "Sag T1",
+      "plane": "sagittal",
+      "weighting": "T1",
+      "width": 224,
+      "height": 256,
+      "slices": 33,
+      "sliceThicknessMm": 4.0,
+      "pixelSpacingMm": [
+        1.172,
+        1.172
+      ],
+      "defaultWindow": 224,
+      "defaultLevel": 112,
+      "defaultSlice": 16,
+      "file": "/studies/hip/sag-t1.bin.gz"
+    }
+  ]
+}

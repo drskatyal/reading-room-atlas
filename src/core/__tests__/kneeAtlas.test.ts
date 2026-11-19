@@ -323,4 +323,40 @@ describe('ReadingRoom Multi-Joint 3T Atlas & Platform Suite', () => {
     expect(seamPairsChecked).toBeGreaterThan(0);
     sphere.dispose();
   });
+
+  it('ships de-identified multi-sequence clinical MRI studies for all 6 joints with zero patient metadata', () => {
+    const forbiddenPhiKeys = /patient|birth|dob|accession|institution|physician|doctor|mrn|studydate|seriesdate|patientname|patientid/i;
+
+    for (const joint of ALL_JOINT_ATLASES) {
+      const manifestPath = path.join(PUBLIC_ROOT, 'studies', joint.id, 'manifest.json');
+      expect(fs.existsSync(manifestPath), `Missing clinical study manifest: ${manifestPath}`).toBe(true);
+      const raw = fs.readFileSync(manifestPath, 'utf8');
+      expect(raw, `Potential PHI key/text in ${manifestPath}`).not.toMatch(forbiddenPhiKeys);
+
+      const parsed = JSON.parse(raw) as {
+        jointId: string;
+        modality: string;
+        sequences: Array<{
+          id: string;
+          label: string;
+          plane: string;
+          width: number;
+          height: number;
+          slices: number;
+          file: string;
+        }>;
+      };
+      expect(parsed.jointId).toBe(joint.id);
+      expect(parsed.sequences.length).toBeGreaterThanOrEqual(5);
+
+      for (const seq of parsed.sequences) {
+        expect(seq.slices).toBeGreaterThanOrEqual(10);
+        expect(seq.width).toBeGreaterThanOrEqual(128);
+        expect(seq.height).toBeGreaterThanOrEqual(128);
+        const binPath = path.join(PUBLIC_ROOT, seq.file.replace(/^\//, ''));
+        expect(fs.existsSync(binPath), `Missing sequence stack: ${binPath}`).toBe(true);
+        expect(fs.statSync(binPath).size, `Sequence stack too small: ${binPath}`).toBeGreaterThan(50_000);
+      }
+    }
+  });
 });
